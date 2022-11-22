@@ -7,7 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 # Make sure our local CMake Modules path comes first
 list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_SOURCE_DIR}/cmake)
 
-find_package(RTSAAPI)
+find_package(RTSAAPI REQUIRED)
 
 add_subdirectory(ConfigTree)
 add_subdirectory(EnumDevices)
