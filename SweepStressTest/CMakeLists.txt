@@ -1,0 +1,2 @@
+add_executable(SweepStressTest SweepStressTest.cpp)
+target_link_libraries(SweepStressTest AaroniaRTSAAPI)

@@ -1,0 +1,2 @@
+add_executable(TransferRate TransferRate.cpp)
+target_link_libraries(TransferRate AaroniaRTSAAPI)

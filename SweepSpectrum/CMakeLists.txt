@@ -1,0 +1,2 @@
+add_executable(SweepSpectrum SweepSpectrum.cpp)
+target_link_libraries(SweepSpectrum AaroniaRTSAAPI)

@@ -1,0 +1,6 @@
+# Vim
+*~
+
+# Build
+.cache/
+build/

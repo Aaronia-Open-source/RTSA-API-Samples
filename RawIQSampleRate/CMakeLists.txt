@@ -1,0 +1,2 @@
+add_executable(RawIQSampleRate RawIQSampleRate.cpp)
+target_link_libraries(RawIQSampleRate AaroniaRTSAAPI)

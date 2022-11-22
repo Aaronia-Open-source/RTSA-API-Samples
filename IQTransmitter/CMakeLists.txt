@@ -1,0 +1,2 @@
+add_executable(IQTransmitter IQTransmitter.cpp)
+target_link_libraries(IQTransmitter AaroniaRTSAAPI m)

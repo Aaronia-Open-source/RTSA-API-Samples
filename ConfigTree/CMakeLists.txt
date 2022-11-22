@@ -1,0 +1,2 @@
+add_executable(ConfigTree ConfigTree.cpp)
+target_link_libraries(ConfigTree AaroniaRTSAAPI)

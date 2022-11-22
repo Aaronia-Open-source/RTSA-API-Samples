@@ -1,0 +1,2 @@
+add_executable(IQTransceiver IQTransceiver.cpp)
+target_link_libraries(IQTransceiver AaroniaRTSAAPI)
