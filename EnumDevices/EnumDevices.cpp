@@ -5,57 +5,63 @@
 
 int main()
 {
-	AARTSAAPI_Result	res;
+    AARTSAAPI_Result res;
 
-	// Initialize library for medium memory usage
+    // Initialize library for medium memory usage
+    if ( ( res = AARTSAAPI_Init( AARTSAAPI_MEMORY_MEDIUM ) ) != AARTSAAPI_OK )
+    {
+        std::cerr << "AARTSAAPI_Init failed : " << std::hex << res << std::endl;
+        return EXIT_FAILURE;
+    }
 
-	if ((res = AARTSAAPI_Init(AARTSAAPI_MEMORY_MEDIUM)) == AARTSAAPI_OK)
-	{
+    // Open a library handle for use by this application
+    AARTSAAPI_Handle h;
 
-		// Open a library handle for use by this application
+    if ( ( res = AARTSAAPI_Open( &h ) ) == AARTSAAPI_OK )
+    {
+        // Rescan all devices controlled by the aaronia library and update
+        // the firmware if required.
 
-		AARTSAAPI_Handle	h;
+        while ( true )
+        {
+            res = AARTSAAPI_RescanDevices( &h, 2000 );
+            if ( res == AARTSAAPI_RETRY )
+                continue;
 
-		if ((res = AARTSAAPI_Open(&h)) == AARTSAAPI_OK)
-		{
-			// Rescan all devices controlled by the aaronia library and update
-			// the firmware if required.
+            if ( res != AARTSAAPI_OK )
+            {
+                std::cerr << "AARTSAAPI_RescanDevices failed : " << std::hex << res << std::endl;
+                break;
+            }
 
-			if ((res = AARTSAAPI_RescanDevices(&h, 2000)) == AARTSAAPI_OK)
-			{
-				// Initialize device info structure with the structure size
+            // Initialize device info structure with the structure size
 
-				AARTSAAPI_DeviceInfo	dinfo = { sizeof(AARTSAAPI_DeviceInfo) };
+            AARTSAAPI_DeviceInfo dinfo = { sizeof( AARTSAAPI_DeviceInfo ) };
 
-				// Loop over all devices, starting from zero until an error occurs
-				// or we run out of devices
+            // Loop over all devices, starting from zero until an error occurs
+            // or we run out of devices
 
-				int	i = 0;
-				while (AARTSAAPI_EnumDevice(&h, L"spectranv6", i, &dinfo) == AARTSAAPI_OK)
-				{
-					// Print the device serial number
+            int i = 0;
+            while ( AARTSAAPI_EnumDevice( &h, L"spectranv6", i, &dinfo ) == AARTSAAPI_OK )
+            {
+                // Print the device serial number
 
-					std::wcout << i << " : " << dinfo.serialNumber << std::endl;
-					i++;
-				}
-			}
-			else
-				std::wcerr << "AARTSAAPI_RescanDevices failed : " << std::hex << res << std::endl;
+                std::wcout << i << " : " << dinfo.serialNumber << std::endl;
+                i++;
+            }
 
-			// Close the library handle
+            break;
+        }
 
-			AARTSAAPI_Close(&h);
-		}
-		else
-			std::wcerr << "AARTSAAPI_Open failed : " << std::hex << res << std::endl;
+        // Close the library handle
 
-		// Shutdown library, release resources
+        AARTSAAPI_Close( &h );
+    }
+    else
+        std::wcerr << "AARTSAAPI_Open failed : " << std::hex << res << std::endl;
 
-		AARTSAAPI_Shutdown();
-	}
-	else
-		std::wcerr << "AARTSAAPI_Init failed : " << std::hex << res << std::endl;
+    // Shutdown library, release resources
+    AARTSAAPI_Shutdown();
 
-
-	return 0;
+    return EXIT_SUCCESS;
 }

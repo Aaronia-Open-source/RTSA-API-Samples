@@ -1,0 +1,4 @@
+BasedOnStyle: Microsoft
+SpacesInParentheses: true
+SpaceBeforeInheritanceColon: true
+ColumnLimit: 0
