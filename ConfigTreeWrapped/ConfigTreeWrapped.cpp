@@ -16,7 +16,7 @@ void walkConfigTree( AAR::ConfigNode &node, int depth = 0 )
     case AAR::ConfigNodeType::GROUP: {
         fmt::print( "{} - {}:\n", shift, node.getName() );
         auto children = node.getChildren();
-        for (auto& child : children)
+        for ( auto &child : children )
             walkConfigTree( child, depth + 1 );
 
         break;
@@ -58,7 +58,7 @@ int main()
     auto healthRoot = device->getHealthRoot();
     walkConfigTree( healthRoot );
 
-    fmt::print("\n");
+    fmt::print( "\n" );
 
     return EXIT_SUCCESS;
 }

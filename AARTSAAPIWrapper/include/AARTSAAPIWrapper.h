@@ -48,6 +48,17 @@ enum class ConfigNodeType
     STRING = AARTSAAPI_CONFIG_TYPE_STRING
 };
 
+enum class DeviceState
+{
+    IDLE = AARTSAAPI_IDLE,
+    CONNECTING = AARTSAAPI_CONNECTING,
+    CONNECTED = AARTSAAPI_CONNECTED,
+    STARTING = AARTSAAPI_STARTING,
+    RUNNING = AARTSAAPI_RUNNING,
+    STOPPING = AARTSAAPI_STOPPING,
+    DISCONNECTING = AARTSAAPI_DISCONNECTING
+};
+
 class ConfigNode
 {
     friend class DeviceWrapper;
@@ -161,15 +172,20 @@ public:
 
     std::string getString();
     void setString( const std::string &str );
+    ConfigNode &operator=( const std::string &str );
+    ConfigNode &operator=( const char *str );
 
     int64_t getInt();
     void setInt( int64_t v );
+    ConfigNode &operator=( int64_t v );
 
     double getFloat();
     void setFloat( double v );
+    ConfigNode &operator=( double v );
 
     bool getBool();
     void setBool( bool v );
+    ConfigNode &operator=( bool v );
 
     std::vector<ConfigNode> &getChildren( bool refresh = false );
 };
@@ -193,6 +209,8 @@ private:
     AARTSAAPI_ConfigInfo mConfigInfo;
 
     bool mOpened = false;
+    bool mConnected = false;
+    bool mStarted = false;
     AARTSAAPI_Device mDeviceHandle{};
 
     bool mReady;
@@ -214,9 +232,29 @@ public:
 
     void close();
 
+    void connect();
+
+    void disconnect();
+
+    void start();
+
+    void stop();
+
     ConfigNode getConfigRoot();
 
     ConfigNode getHealthRoot();
+
+    DeviceState getState();
+
+    int32_t getAvailablePacketCount( int32_t channel );
+
+    bool getPacket( AARTSAAPI_Packet *packet, int32_t channel, int32_t index, bool blocking = true, int timeout = 100 );
+
+    void sendPacket( AARTSAAPI_Packet *packet, int32_t channel );
+
+    void consumePackets( int32_t channel, int32_t count );
+
+    double getMasterStreamTime();
 
     const std::shared_ptr<RTSAWrapper> getRTSAWrapper() const
     {
@@ -276,7 +314,7 @@ public:
     {
         return std::shared_ptr<RTSAWrapper>( new RTSAWrapper( mode ) );
     }
-    virtual ~RTSAWrapper();
+    ~RTSAWrapper();
 
     const AARTSAAPI_Handle &getAPIHandle()
     {

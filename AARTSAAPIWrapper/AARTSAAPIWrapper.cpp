@@ -3,11 +3,13 @@
 #include <fmt/core.h>
 #include <fmt/xchar.h>
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <iostream>
+#include <thread>
 
 #ifndef NDEBUG
 #define LOG_DEBUG( f, ... ) fmt::print( stderr, f, ##__VA_ARGS__ )
@@ -39,13 +41,13 @@ static const char *const RETURN_MESSAGES[] = {
     "Retry operation!" };
 
 static const char *const STATUS_NAMES[] = {
-    "Status: Idle",
-    "Status: Connecting",
-    "Status: Connected",
-    "Status: Starting",
-    "Status: Running",
-    "Status: Stopping",
-    "Status: Disconnecting" };
+    "Idle",
+    "Connecting",
+    "Connected",
+    "Starting",
+    "Running",
+    "Stopping",
+    "Disconnecting" };
 
 static const char *const WARNING_MESSAGES[] = {
     "Warning:",
@@ -161,20 +163,20 @@ ConfigNode ConfigNode::operator[]( const std::string &path )
     AARTSAAPI_Config cfg;
     AARTSAAPI_Result res = AARTSAAPI_ConfigFind( &mDevice->mDeviceHandle, &mConfigNode, &cfg, StringToWString( path ).c_str() );
     if ( res != AARTSAAPI_OK )
-        throw std::runtime_error( fmt::format("Could not find path {} in node {}: {}", path, mName, ResultToString( res ) ));
+        throw std::runtime_error( fmt::format( "Could not find path {} in node {}: {}", path, mFullName, ResultToString( res ) ) );
 
-    return ConfigNode(mDevice, cfg, mFullName + "/");
+    return ConfigNode( mDevice, cfg, mFullName + "/" );
 }
 
 std::string ConfigNode::getString()
 {
     if ( mType != ConfigNodeType::STRING && mType != ConfigNodeType::ENUM )
-        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mFullName, TYPE_NAMES[static_cast<int>( mType )] ) );
 
     ssize_t size = sizeof( mDevice->mConfigInfo.options );
     AARTSAAPI_Result res = AARTSAAPI_ConfigGetString( &mDevice->mDeviceHandle, &mConfigNode, mDevice->mConfigInfo.options, &size );
     if ( res != AARTSAAPI_OK )
-        throw std::runtime_error( fmt::format( "Failed to get string value of {}: {}", mName, ResultToString( res ) ) );
+        throw std::runtime_error( fmt::format( "Failed to get string value of {}: {}", mFullName, ResultToString( res ) ) );
 
     std::wstring str( mDevice->mConfigInfo.options );
     return WStringToString( str );
@@ -182,20 +184,38 @@ std::string ConfigNode::getString()
 
 void ConfigNode::setString( const std::string &str )
 {
-    if ( mType != ConfigNodeType::STRING && mType != ConfigNodeType::ENUM  )
-        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+    if ( mType != ConfigNodeType::STRING && mType != ConfigNodeType::ENUM )
+        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mFullName, TYPE_NAMES[static_cast<int>( mType )] ) );
 
     std::wstring wstr = StringToWString( str );
 
     AARTSAAPI_Result res = AARTSAAPI_ConfigSetString( &mDevice->mDeviceHandle, &mConfigNode, wstr.c_str() );
     if ( res != AARTSAAPI_OK )
-        throw std::runtime_error( fmt::format( "Failed to set string value of {}: {}", mName, ResultToString( res ) ) );
+    {
+        if ( mType == ConfigNodeType::ENUM && res == AARTSAAPI_ERROR_VALUE_INVALID )
+            throw std::runtime_error( fmt::format( "Failed to set enum value of {} to \"{}\": {}. Valid options are: {}", mFullName, str, ResultToString( res ), mOptions ) );
+        throw std::runtime_error( fmt::format( "Failed to set string value of {} to \"{}\": {}", mFullName, str, ResultToString( res ) ) );
+    }
+}
+
+ConfigNode &ConfigNode::operator=( const std::string &str )
+{
+    setString( str );
+
+    return *this;
+}
+
+ConfigNode &ConfigNode::operator=( const char *str )
+{
+    setString( std::string( str ) );
+
+    return *this;
 }
 
 int64_t ConfigNode::getInt()
 {
     if ( mType != ConfigNodeType::NUMBER && mType != ConfigNodeType::BOOL )
-        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mFullName, TYPE_NAMES[static_cast<int>( mType )] ) );
 
     int64_t value;
     AARTSAAPI_Result res = AARTSAAPI_ConfigGetInteger( &mDevice->mDeviceHandle, &mConfigNode, &value );
@@ -205,7 +225,7 @@ int64_t ConfigNode::getInt()
         return 0;
 
     if ( res != AARTSAAPI_OK )
-        throw std::runtime_error( fmt::format( "Failed to get integer value of {}: {}", mName, ResultToString( res ) ) );
+        throw std::runtime_error( fmt::format( "Failed to get integer value of {}: {}", mFullName, ResultToString( res ) ) );
 
     return value;
 }
@@ -213,22 +233,28 @@ int64_t ConfigNode::getInt()
 void ConfigNode::setInt( int64_t v )
 {
     if ( mType != ConfigNodeType::NUMBER && mType != ConfigNodeType::BOOL )
-        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mFullName, TYPE_NAMES[static_cast<int>( mType )] ) );
 
     AARTSAAPI_Result res = AARTSAAPI_ConfigSetInteger( &mDevice->mDeviceHandle, &mConfigNode, v );
     if ( res != AARTSAAPI_OK )
-        throw std::runtime_error( fmt::format( "Failed to set integer value of {}: {}", mName, ResultToString( res ) ) );
+        throw std::runtime_error( fmt::format( "Failed to set integer value of {}: {}", mFullName, ResultToString( res ) ) );
+}
+
+ConfigNode &ConfigNode::operator=( int64_t v )
+{
+    setInt( v );
+    return *this;
 }
 
 double ConfigNode::getFloat()
 {
     if ( mType != ConfigNodeType::NUMBER )
-        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mFullName, TYPE_NAMES[static_cast<int>( mType )] ) );
 
     double value;
     AARTSAAPI_Result res = AARTSAAPI_ConfigGetFloat( &mDevice->mDeviceHandle, &mConfigNode, &value );
     if ( res != AARTSAAPI_OK )
-        throw std::runtime_error( fmt::format( "Failed to get float value of {}: {}", mName, ResultToString( res ) ) );
+        throw std::runtime_error( fmt::format( "Failed to get float value of {}: {}", mFullName, ResultToString( res ) ) );
 
     return value;
 }
@@ -236,11 +262,17 @@ double ConfigNode::getFloat()
 void ConfigNode::setFloat( double v )
 {
     if ( mType != ConfigNodeType::NUMBER )
-        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mFullName, TYPE_NAMES[static_cast<int>( mType )] ) );
 
     AARTSAAPI_Result res = AARTSAAPI_ConfigSetFloat( &mDevice->mDeviceHandle, &mConfigNode, v );
     if ( res != AARTSAAPI_OK )
-        throw std::runtime_error( fmt::format( "Failed to set float value of {}: {}", mName, ResultToString( res ) ) );
+        throw std::runtime_error( fmt::format( "Failed to set float value of {}: {}", mFullName, ResultToString( res ) ) );
+}
+
+ConfigNode &ConfigNode::operator=( double v )
+{
+    setFloat( v );
+    return *this;
 }
 
 bool ConfigNode::getBool()
@@ -253,10 +285,16 @@ void ConfigNode::setBool( bool v )
     setInt( v );
 }
 
+ConfigNode &ConfigNode::operator=( bool v )
+{
+    setBool( v );
+    return *this;
+}
+
 std::vector<ConfigNode> &ConfigNode::getChildren( bool refresh )
 {
     if ( mType != ConfigNodeType::GROUP )
-        throw std::runtime_error( fmt::format( "Only group nodes can have children, {} is of type {}!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+        throw std::runtime_error( fmt::format( "Only group nodes can have children, {} is of type {}!", mFullName, TYPE_NAMES[static_cast<int>( mType )] ) );
 
     if ( !refresh && mChildren.size() )
         return mChildren;
@@ -266,11 +304,11 @@ std::vector<ConfigNode> &ConfigNode::getChildren( bool refresh )
     AARTSAAPI_Config config;
     AARTSAAPI_Result res = AARTSAAPI_ConfigFirst( &mDevice->mDeviceHandle, &mConfigNode, &config );
     if ( res != AARTSAAPI_OK )
-        throw std::runtime_error( fmt::format( "Failed to descend into children of {}: {}", mName, ResultToString( res ) ) );
+        throw std::runtime_error( fmt::format( "Failed to descend into children of {}: {}", mFullName, ResultToString( res ) ) );
 
     do
     {
-        mChildren.push_back( ConfigNode( mDevice, config, mFullName + "/" ));
+        mChildren.push_back( ConfigNode( mDevice, config, mFullName + "/" ) );
     } while ( AARTSAAPI_ConfigNext( &mDevice->mDeviceHandle, &mConfigNode, &config ) == AARTSAAPI_OK );
 
     return mChildren;
@@ -294,14 +332,77 @@ void DeviceWrapper::open( DeviceMode mode )
 
 void DeviceWrapper::close()
 {
-    if ( mOpened )
+    if ( !mOpened )
     {
-        AARTSAAPI_Result res = AARTSAAPI_CloseDevice( &mParent->mAPIHandle, &mDeviceHandle );
-        if ( res != AARTSAAPI_OK )
-            LOG_DEBUG( "Failed to close device ({}): {}", getSerialNumber(), ResultToString( res ) );
-
-        mOpened = false;
+        LOG_DEBUG( "Tried to close already closed device!\n" );
+        return;
     }
+
+    if ( mConnected )
+        disconnect();
+
+    AARTSAAPI_Result res = AARTSAAPI_CloseDevice( &mParent->mAPIHandle, &mDeviceHandle );
+    if ( res != AARTSAAPI_OK )
+        LOG_DEBUG( "Failed to close device ({}): {}\n", getSerialNumber(), ResultToString( res ) );
+
+    mOpened = false;
+}
+
+void DeviceWrapper::connect()
+{
+    if ( !mOpened )
+        throw std::runtime_error( fmt::format( "Cannot connect to device ({}) which has not been opened yet!", mSerialNumber ) );
+
+    AARTSAAPI_Result res = AARTSAAPI_ConnectDevice( &mDeviceHandle );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to connect to device: {}", ResultToString( res ) ) );
+
+    mConnected = true;
+}
+
+void DeviceWrapper::disconnect()
+{
+    if ( !mConnected )
+    {
+        LOG_DEBUG( "Tried to disconnect from already disconnected device!\n" );
+        return;
+    }
+
+    if ( mStarted )
+        stop();
+
+    AARTSAAPI_Result res = AARTSAAPI_DisconnectDevice( &mDeviceHandle );
+    if ( res != AARTSAAPI_OK )
+        LOG_DEBUG( "Failed to disconnect from device: {}\n", ResultToString( res ) );
+
+    mConnected = false;
+}
+
+void DeviceWrapper::start()
+{
+    if ( !mConnected )
+        connect();
+
+    AARTSAAPI_Result res = AARTSAAPI_StartDevice( &mDeviceHandle );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to start device {}: {}", mSerialNumber, ResultToString( res ) ) );
+
+    mStarted = true;
+}
+
+void DeviceWrapper::stop()
+{
+    if ( !mStarted )
+    {
+        LOG_DEBUG( "Tried to stop already stopped device!\n" );
+        return;
+    }
+
+    AARTSAAPI_Result res = AARTSAAPI_StopDevice( &mDeviceHandle );
+    if ( res != AARTSAAPI_OK )
+        LOG_DEBUG( "Failed to stop device {}: {}\n", mSerialNumber, ResultToString( res ) );
+
+    mStarted = false;
 }
 
 DeviceWrapper::DeviceWrapper( std::shared_ptr<RTSAWrapper> parent, DeviceType deviceType, const AARTSAAPI_DeviceInfo &dinfo )
@@ -318,7 +419,8 @@ DeviceWrapper::DeviceWrapper( std::shared_ptr<RTSAWrapper> parent, DeviceType de
 
 DeviceWrapper::~DeviceWrapper()
 {
-    close();
+    if ( mOpened )
+        close();
 }
 
 ConfigNode DeviceWrapper::getConfigRoot()
@@ -347,6 +449,74 @@ ConfigNode DeviceWrapper::getHealthRoot()
         throw std::runtime_error( fmt::format( "Failed to get health root element of {}: {}", mSerialNumber, ResultToString( res ) ) );
 
     return ConfigNode( this->shared_from_this(), cfg, "/" );
+}
+
+DeviceState DeviceWrapper::getState()
+{
+    AARTSAAPI_Result res = AARTSAAPI_GetDeviceState( &mDeviceHandle );
+    if ( !( res & AARTSAAPI_IDLE ) )
+        throw std::runtime_error( fmt::format( "Failed to get device state: {}", ResultToString( res ) ) );
+
+    return static_cast<DeviceState>( res & 0xFF );
+}
+
+int32_t DeviceWrapper::getAvailablePacketCount( int32_t channel )
+{
+    int32_t v;
+    AARTSAAPI_Result res = AARTSAAPI_AvailPackets( &mDeviceHandle, channel, &v );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to query available packet count of device {} on channel {}: {}", mSerialNumber, channel, ResultToString( res ) ) );
+
+    return v;
+}
+
+bool DeviceWrapper::getPacket( AARTSAAPI_Packet *packet, int32_t channel, int32_t index, bool blocking, int timeout )
+{
+    packet->cbsize = sizeof( AARTSAAPI_Packet );
+
+    for ( int i = 0; ( i == 0 || blocking ) && i < timeout / 5; i++ )
+    {
+        AARTSAAPI_Result res = AARTSAAPI_GetPacket( &mDeviceHandle, channel, index, packet );
+        if ( res == AARTSAAPI_OK )
+            return true;
+
+        if ( blocking && res == AARTSAAPI_EMPTY )
+        {
+            std::this_thread::sleep_for( std::chrono::milliseconds( 5 ) );
+            continue;
+        }
+
+        throw std::runtime_error( fmt::format( "An error occurred while trying to get a new packet: {}", res ) );
+    }
+
+    return false;
+}
+
+void DeviceWrapper::sendPacket( AARTSAAPI_Packet *packet, int32_t channel )
+{
+    packet->cbsize = sizeof( AARTSAAPI_Packet );
+
+    AARTSAAPI_Result res = AARTSAAPI_SendPacket( &mDeviceHandle, channel, packet );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to send packet to channel {}: {}", channel, ResultToString( res ) ) );
+}
+
+void DeviceWrapper::consumePackets( int32_t channel, int32_t count )
+{
+    AARTSAAPI_Result res = AARTSAAPI_ConsumePackets( &mDeviceHandle, channel, count );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to consume {} samples on channel {}: {}", count, channel, ResultToString( res ) ) );
+}
+
+double DeviceWrapper::getMasterStreamTime()
+{
+    double v;
+
+    AARTSAAPI_Result res = AARTSAAPI_GetMasterStreamTime( &mDeviceHandle, v );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to get master stream time: {}", ResultToString( res ) ) );
+
+    return v;
 }
 
 RTSAWrapper::RTSAWrapper( const MemoryMode memoryMode )
@@ -384,7 +554,7 @@ std::shared_ptr<DeviceWrapper> RTSAWrapper::getDevice( DeviceType deviceType, co
             continue;
 
         if ( ptr->mOpened )
-            LOG_DEBUG( "Warning: RTSAWrapper::getDevice was used to get a handle on a device which was already opened!" );
+            LOG_DEBUG( "Warning: RTSAWrapper::getDevice was used to get a handle on a device which was already opened!\n" );
 
         return ptr;
     }
@@ -418,7 +588,7 @@ std::shared_ptr<DeviceWrapper> RTSAWrapper::getDevice( DeviceType deviceType, co
         }
 
         if ( dinfo.active )
-            LOG_DEBUG( "Warning: RTSAWrapper::getDevice was used to get a handle on a device which was already opened!" );
+            LOG_DEBUG( "Warning: RTSAWrapper::getDevice was used to get a handle on a device which was already opened!\n" );
 
         auto ptr = DeviceWrapper::create( this->shared_from_this(), deviceType, dinfo );
         mDevices.push_back( std::weak_ptr( ptr ) );
