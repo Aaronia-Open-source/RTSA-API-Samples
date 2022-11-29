@@ -5,8 +5,6 @@
 #include <string>
 #include <thread>
 
-#pragma comment( lib, "aaroniartsaapi.lib" )
-
 AARTSAAPI_Result testRange( AARTSAAPI_Device d, double startFrequency, double stopFrequency, double rbwFrequency )
 {
     AARTSAAPI_Result res;

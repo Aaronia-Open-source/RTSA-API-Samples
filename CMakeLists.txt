@@ -7,7 +7,28 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 # Make sure our local CMake Modules path comes first
 list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_SOURCE_DIR}/cmake)
 
+if ((CMAKE_BUILD_TYPE STREQUAL "Debug") OR (CMAKE_BUILDTYPE STREQUAL "RelWithDebInfo"))
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        # using Clang
+        set(CMAKE_CXX_FLAGS "-Weverything -march=native -mtune=native -mavx2 -Wno-missing-field-initializers")
+
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # using GCC
+        set(CMAKE_CXX_FLAGS "-Wall -Wextra -march=native -mtune=native -mavx2 -Wno-missing-field-initializers")
+
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
+        # using Intel C++ (TODO)
+
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        # using Visual Studio C++ (TODO)
+
+    endif()
+endif()
+
 find_package(RTSAAPI REQUIRED)
+find_package(fmt REQUIRED)
+
+add_subdirectory(AARTSAAPIWrapper)
 
 add_subdirectory(ConfigTree)
 add_subdirectory(EnumDevices)

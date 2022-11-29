@@ -2,3 +2,5 @@ BasedOnStyle: Microsoft
 SpacesInParentheses: true
 SpaceBeforeInheritanceColon: true
 ColumnLimit: 0
+AccessModifierOffset: -4
+
