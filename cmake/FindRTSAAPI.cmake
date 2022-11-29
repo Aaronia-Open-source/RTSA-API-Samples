@@ -1,9 +1,14 @@
 find_library(
     RTSAAPI_LIB
     AaroniaRTSAAPI
-    PATHS $ENV{HOME}/aaronia/rtsa/Debug/Aaronia-RTSA-Suite $ENV{HOME}/Aaronia/RTSA/Aaronia-RTSA-Suite-PRO /opt/Aaronia/RTSA/Aaronia-RTSA-Suite-PRO
+    HINTS ${RTSA_INSTALLATION_DIRECTORY}
+    PATHS
+        $ENV{HOME}/Aaronia/RTSA/Aaronia-RTSA-Suite-PRO
+        /opt/Aaronia/RTSA/Aaronia-RTSA-Suite-PRO
     REQUIRED
     )
+
+# $ENV{HOME}/aaronia/rtsa/Debug/Aaronia-RTSA-Suite
 
 get_filename_component(RTSA_INSTALL_DIRECTORY "${RTSAAPI_LIB}" DIRECTORY)
 

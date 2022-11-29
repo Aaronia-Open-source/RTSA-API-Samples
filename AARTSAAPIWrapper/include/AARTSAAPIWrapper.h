@@ -1,3 +1,5 @@
+#pragma once
+
 #include <aaroniartsaapi.h>
 
 #include <cstdint>
@@ -15,6 +17,16 @@ enum class DeviceType
     SPECTRANV6 = 0
 };
 
+enum class DeviceMode
+{
+    RAW = 0,
+    RTSA,
+    SWEEPSA,
+    IQRECEIVER,
+    IQTRANSMITTER,
+    IQTRANSCEIVER
+};
+
 enum class MemoryMode
 {
     SMALL = AARTSAAPI_MEMORY_SMALL,
@@ -23,67 +35,239 @@ enum class MemoryMode
     LUDICRIOUS = AARTSAAPI_MEMORY_LUDICROUS
 };
 
+class DeviceWrapper;
+
+enum class ConfigNodeType
+{
+    OTHER = AARTSAAPI_CONFIG_TYPE_OTHER,
+    GROUP = AARTSAAPI_CONFIG_TYPE_GROUP,
+    BLOB = AARTSAAPI_CONFIG_TYPE_BLOB,
+    NUMBER = AARTSAAPI_CONFIG_TYPE_NUMBER,
+    BOOL = AARTSAAPI_CONFIG_TYPE_BOOL,
+    ENUM = AARTSAAPI_CONFIG_TYPE_ENUM,
+    STRING = AARTSAAPI_CONFIG_TYPE_STRING
+};
+
+class ConfigNode
+{
+    friend class DeviceWrapper;
+
+    std::shared_ptr<DeviceWrapper> mDevice;
+
+    ConfigNode( std::shared_ptr<DeviceWrapper> device, AARTSAAPI_Config config, const std::string &path );
+
+    AARTSAAPI_Config mConfigNode;
+
+    std::string mPath;
+    std::string mFullName;
+
+    std::string mName;
+    std::wstring mNameW;
+
+    std::string mTitle;
+    std::wstring mTitleW;
+
+    std::string mUnit;
+    std::wstring mUnitW;
+
+    std::string mOptions;
+    std::wstring mOptionsW;
+
+    uint64_t mDisabledOptions;
+
+    // Parameters of numeric config items
+    double mValueMax = 0;
+    double mValueMin = 0;
+    double mValueStep = 0;
+
+    ConfigNodeType mType;
+
+    std::vector<ConfigNode> mChildren;
+
+public:
+    ~ConfigNode();
+
+    ConfigNode operator[]( const std::string &path );
+
+    std::string getName() const
+    {
+        return mName;
+    }
+
+    std::wstring getNameW() const
+    {
+        return mNameW;
+    }
+
+    std::string getFullName() const
+    {
+        return mFullName;
+    }
+
+    std::string getPath() const
+    {
+        return mPath;
+    }
+
+    std::string getTitle() const
+    {
+        return mTitle;
+    }
+
+    std::wstring getTitleW() const
+    {
+        return mTitleW;
+    }
+
+    std::string getUnit() const
+    {
+        return mUnit;
+    }
+
+    std::wstring getUnitW() const
+    {
+        return mUnitW;
+    }
+
+    std::string getOptions() const
+    {
+        return mOptions;
+    }
+
+    std::wstring getOptionsW() const
+    {
+        return mOptionsW;
+    }
+
+    ConfigNodeType getType() const
+    {
+        return mType;
+    }
+
+    double getValueMax() const
+    {
+        return mValueMax;
+    }
+
+    double getValueMin() const
+    {
+        return mValueMin;
+    }
+
+    double getValueStep() const
+    {
+        return mValueStep;
+    }
+
+    std::string getString();
+    void setString( const std::string &str );
+
+    int64_t getInt();
+    void setInt( int64_t v );
+
+    double getFloat();
+    void setFloat( double v );
+
+    bool getBool();
+    void setBool( bool v );
+
+    std::vector<ConfigNode> &getChildren( bool refresh = false );
+};
+
 class RTSAWrapper;
 
-class DeviceWrapper
+class DeviceWrapper : public std::enable_shared_from_this<DeviceWrapper>
 {
+    friend class RTSAWrapper;
+    friend class ConfigNode;
+
 private:
     std::shared_ptr<RTSAWrapper> mParent;
-    std::wstring mSerialNumber;
+    DeviceType mDeviceType;
+    std::wstring mSerialNumberW;
+    std::string mSerialNumber;
+
+    // This object is only used by ConfigNodes which belog to this device object.
+    // It is stored here to facilitate sharing a single ConfigInfo object between all
+    // "child" ConfigNodes.
+    AARTSAAPI_ConfigInfo mConfigInfo;
+
+    bool mOpened = false;
+    AARTSAAPI_Device mDeviceHandle{};
+
     bool mReady;
     bool mBoost;
     bool mSuperSpeed;
     bool mActive;
 
-public:
-    DeviceWrapper( std::shared_ptr<RTSAWrapper> parent, const AARTSAAPI_DeviceInfo &dinfo )
-        : mParent( parent ),
-          mSerialNumber( dinfo.serialNumber ),
-          mReady( dinfo.ready ),
-          mBoost( dinfo.boost ),
-          mSuperSpeed( dinfo.superspeed ),
-          mActive( dinfo.active )
+    static std::shared_ptr<DeviceWrapper> create( std::shared_ptr<RTSAWrapper> parent, DeviceType deviceType, const AARTSAAPI_DeviceInfo &dinfo )
     {
+        return std::shared_ptr<DeviceWrapper>( new DeviceWrapper( parent, deviceType, dinfo ) );
     }
 
-    const std::shared_ptr<RTSAWrapper> getRTSAWrapper()
+    DeviceWrapper( std::shared_ptr<RTSAWrapper> parent, DeviceType deviceType, const AARTSAAPI_DeviceInfo &dinfo );
+
+public:
+    ~DeviceWrapper();
+
+    void open( DeviceMode mode );
+
+    void close();
+
+    ConfigNode getConfigRoot();
+
+    ConfigNode getHealthRoot();
+
+    const std::shared_ptr<RTSAWrapper> getRTSAWrapper() const
     {
         return mParent;
     }
 
     const std::wstring &getSerialNumberW() const
     {
-        return mSerialNumber;
+        return mSerialNumberW;
     }
 
     const std::string getSerialNumber() const
     {
-        std::string serialNumber( mSerialNumber.cbegin(), mSerialNumber.cend() );
-        return serialNumber;
+        return mSerialNumber;
     }
 
     bool isReady() const
     {
         return mReady;
     }
+
     bool hasBoost() const
     {
         return mBoost;
     }
+
     bool isSuperSpeed() const
     {
         return mSuperSpeed;
     }
+
     bool isActive() const
     {
         return mActive;
+    }
+
+    bool isOpen() const
+    {
+        return mOpened;
     }
 };
 
 class RTSAWrapper : public std::enable_shared_from_this<RTSAWrapper>
 {
+    friend class DeviceWrapper;
+    friend class ConfigNode;
+
 private:
     AARTSAAPI_Handle mAPIHandle;
+
+    std::vector<std::weak_ptr<DeviceWrapper>> mDevices;
 
     RTSAWrapper( MemoryMode memoryMode );
 
@@ -99,7 +283,9 @@ public:
         return mAPIHandle;
     }
 
-    std::vector<DeviceWrapper> getAllDevices( DeviceType deviceType, bool rescan = true, int timeout = 30000 );
+    std::vector<std::shared_ptr<DeviceWrapper>> getAllDevices( DeviceType deviceType, bool rescan = true, int timeout = 30000 );
+
+    std::shared_ptr<DeviceWrapper> getDevice( DeviceType deviceType, const std::string &serialNumber = "", int timeout = 30000 );
 };
 
 }; // namespace AARTSAAPI

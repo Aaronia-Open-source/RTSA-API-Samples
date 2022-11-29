@@ -1,12 +1,37 @@
 #include "AARTSAAPIWrapper.h"
 
+#include <fmt/core.h>
+#include <fmt/xchar.h>
+
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
-#include <fmt/core.h>
 #include <iostream>
+
+#ifndef NDEBUG
+#define LOG_DEBUG( f, ... ) fmt::print( stderr, f, ##__VA_ARGS__ )
+#else
+#define LOG_DEBUG( f, ... )
+#endif
 
 namespace AARTSAAPI
 {
+
+namespace
+{
+
+std::string WStringToString( const std::wstring &in )
+{
+    return std::string( in.cbegin(), in.cend() );
+}
+
+std::wstring StringToWString( const std::string &in )
+{
+    return std::wstring( in.cbegin(), in.cend() );
+}
+
+}; // namespace
 
 static const char *const RETURN_MESSAGES[] = {
     "Operation performed successfully.",
@@ -23,10 +48,12 @@ static const char *const STATUS_NAMES[] = {
     "Status: Disconnecting" };
 
 static const char *const WARNING_MESSAGES[] = {
+    "Warning:",
     "Warning: Value adjusted!",
     "Warning: Value disabled!" };
 
 static const char *const ERROR_MESSAGES[] = {
+    "Error: ?",
     "Error: Target not initialized!",
     "Error: Target not found!",
     "Error: Target busy!",
@@ -41,35 +68,285 @@ static const char *const ERROR_MESSAGES[] = {
     "Error: Value is invalid!",
     "Error: Value is malformed!" };
 
+static const wchar_t *const DEVICE_TYPE_IDs[] = {
+    L"spectranv6" };
+
+static const wchar_t *const DEVICE_MODE_IDs[] = {
+    L"raw",
+    L"rtsa",
+    L"sweepsa",
+    L"iqreceiver",
+    L"iqtransmitter",
+    L"iqtransceiver" };
+
+static const char *const TYPE_NAMES[] = {
+    "Other",
+    "Group",
+    "blob",
+    "Number",
+    "Bool",
+    "Enum",
+    "String" };
+
 const char *ResultToString( AARTSAAPI_Result result )
 {
     const char *const *target;
-    size_t len;
-    if ( ( result & AARTSAAPI_OK ) == AARTSAAPI_OK )
-    {
-        target = RETURN_MESSAGES;
-        len = sizeof( RETURN_MESSAGES ) / sizeof( *RETURN_MESSAGES );
-    }
-    else if ( ( result & AARTSAAPI_IDLE ) == AARTSAAPI_OK )
+    size_t len = 0;
+
+    if ( ( result & AARTSAAPI_IDLE ) == AARTSAAPI_IDLE )
     {
         target = STATUS_NAMES;
         len = sizeof( STATUS_NAMES ) / sizeof( *STATUS_NAMES );
     }
-    else if ( ( result & AARTSAAPI_WARNING ) == AARTSAAPI_OK )
+    else if ( ( result & AARTSAAPI_WARNING ) == AARTSAAPI_WARNING )
     {
         target = WARNING_MESSAGES;
         len = sizeof( WARNING_MESSAGES ) / sizeof( *WARNING_MESSAGES );
     }
-    else if ( ( result & AARTSAAPI_ERROR ) == AARTSAAPI_OK )
+    else if ( ( result & AARTSAAPI_ERROR ) == AARTSAAPI_ERROR )
     {
         target = ERROR_MESSAGES;
         len = sizeof( ERROR_MESSAGES ) / sizeof( *ERROR_MESSAGES );
     }
+    else
+    {
+        target = RETURN_MESSAGES;
+        len = sizeof( RETURN_MESSAGES ) / sizeof( *RETURN_MESSAGES );
+    }
 
     if ( ( result & 0xFF ) >= len )
-        return "Internal error: There is no translation for this error code available!";
+        return "INTERNAL ERROR: There is no translation available for this error code!";
 
     return target[result & 0xFF];
+}
+
+ConfigNode::ConfigNode( std::shared_ptr<DeviceWrapper> device, AARTSAAPI_Config config, const std::string &path )
+    : mDevice( device ),
+      mConfigNode( config ),
+      mPath( path )
+{
+    auto &info = mDevice->mConfigInfo;
+    AARTSAAPI_Result res = AARTSAAPI_ConfigGetInfo( &mDevice->mDeviceHandle, &mConfigNode, &info );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to obtain information about config item \"{}\": {}", mName, ResultToString( res ) ) );
+
+    mNameW = std::wstring( info.name );
+    mName = WStringToString( mNameW );
+    mFullName = path + mName;
+
+    mTitleW = std::wstring( info.title );
+    mTitle = WStringToString( mTitleW );
+
+    mUnitW = std::wstring( info.unit );
+    mUnit = WStringToString( mUnitW );
+
+    mOptionsW = std::wstring( info.options );
+    mOptions = WStringToString( mOptionsW );
+
+    mDisabledOptions = info.disabledOptions;
+
+    mType = static_cast<ConfigNodeType>( info.type );
+
+    mValueMax = info.maxValue;
+    mValueMin = info.minValue;
+    mValueStep = info.stepValue;
+}
+
+ConfigNode::~ConfigNode()
+{
+}
+
+ConfigNode ConfigNode::operator[]( const std::string &path )
+{
+    AARTSAAPI_Config cfg;
+    AARTSAAPI_Result res = AARTSAAPI_ConfigFind( &mDevice->mDeviceHandle, &mConfigNode, &cfg, StringToWString( path ).c_str() );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format("Could not find path {} in node {}: {}", path, mName, ResultToString( res ) ));
+
+    return ConfigNode(mDevice, cfg, mFullName + "/");
+}
+
+std::string ConfigNode::getString()
+{
+    if ( mType != ConfigNodeType::STRING && mType != ConfigNodeType::ENUM )
+        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+
+    ssize_t size = sizeof( mDevice->mConfigInfo.options );
+    AARTSAAPI_Result res = AARTSAAPI_ConfigGetString( &mDevice->mDeviceHandle, &mConfigNode, mDevice->mConfigInfo.options, &size );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to get string value of {}: {}", mName, ResultToString( res ) ) );
+
+    std::wstring str( mDevice->mConfigInfo.options );
+    return WStringToString( str );
+}
+
+void ConfigNode::setString( const std::string &str )
+{
+    if ( mType != ConfigNodeType::STRING && mType != ConfigNodeType::ENUM  )
+        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+
+    std::wstring wstr = StringToWString( str );
+
+    AARTSAAPI_Result res = AARTSAAPI_ConfigSetString( &mDevice->mDeviceHandle, &mConfigNode, wstr.c_str() );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to set string value of {}: {}", mName, ResultToString( res ) ) );
+}
+
+int64_t ConfigNode::getInt()
+{
+    if ( mType != ConfigNodeType::NUMBER && mType != ConfigNodeType::BOOL )
+        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+
+    int64_t value;
+    AARTSAAPI_Result res = AARTSAAPI_ConfigGetInteger( &mDevice->mDeviceHandle, &mConfigNode, &value );
+
+    // Config item might represent a button
+    if ( res == AARTSAAPI_ERROR_INVALID_CONFIG )
+        return 0;
+
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to get integer value of {}: {}", mName, ResultToString( res ) ) );
+
+    return value;
+}
+
+void ConfigNode::setInt( int64_t v )
+{
+    if ( mType != ConfigNodeType::NUMBER && mType != ConfigNodeType::BOOL )
+        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+
+    AARTSAAPI_Result res = AARTSAAPI_ConfigSetInteger( &mDevice->mDeviceHandle, &mConfigNode, v );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to set integer value of {}: {}", mName, ResultToString( res ) ) );
+}
+
+double ConfigNode::getFloat()
+{
+    if ( mType != ConfigNodeType::NUMBER )
+        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+
+    double value;
+    AARTSAAPI_Result res = AARTSAAPI_ConfigGetFloat( &mDevice->mDeviceHandle, &mConfigNode, &value );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to get float value of {}: {}", mName, ResultToString( res ) ) );
+
+    return value;
+}
+
+void ConfigNode::setFloat( double v )
+{
+    if ( mType != ConfigNodeType::NUMBER )
+        throw std::runtime_error( fmt::format( "Cannot interpret value of {} with type {} as Number!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+
+    AARTSAAPI_Result res = AARTSAAPI_ConfigSetFloat( &mDevice->mDeviceHandle, &mConfigNode, v );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to set float value of {}: {}", mName, ResultToString( res ) ) );
+}
+
+bool ConfigNode::getBool()
+{
+    return getInt();
+}
+
+void ConfigNode::setBool( bool v )
+{
+    setInt( v );
+}
+
+std::vector<ConfigNode> &ConfigNode::getChildren( bool refresh )
+{
+    if ( mType != ConfigNodeType::GROUP )
+        throw std::runtime_error( fmt::format( "Only group nodes can have children, {} is of type {}!", mName, TYPE_NAMES[static_cast<int>( mType )] ) );
+
+    if ( !refresh && mChildren.size() )
+        return mChildren;
+
+    mChildren.clear();
+
+    AARTSAAPI_Config config;
+    AARTSAAPI_Result res = AARTSAAPI_ConfigFirst( &mDevice->mDeviceHandle, &mConfigNode, &config );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to descend into children of {}: {}", mName, ResultToString( res ) ) );
+
+    do
+    {
+        mChildren.push_back( ConfigNode( mDevice, config, mFullName + "/" ));
+    } while ( AARTSAAPI_ConfigNext( &mDevice->mDeviceHandle, &mConfigNode, &config ) == AARTSAAPI_OK );
+
+    return mChildren;
+}
+
+void DeviceWrapper::open( DeviceMode mode )
+{
+    if ( mOpened )
+        throw std::runtime_error( "Device already open!" );
+
+    std::wstring deviceString = fmt::format( L"{}/{}", DEVICE_TYPE_IDs[static_cast<int>( mDeviceType )], DEVICE_MODE_IDs[static_cast<int>( mode )] );
+    AARTSAAPI_Result res = AARTSAAPI_OpenDevice( &mParent->mAPIHandle, &mDeviceHandle,
+                                                 deviceString.c_str(),
+                                                 mSerialNumberW.c_str() );
+
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to open device: {}\n", ResultToString( res ) ) );
+
+    mOpened = true;
+}
+
+void DeviceWrapper::close()
+{
+    if ( mOpened )
+    {
+        AARTSAAPI_Result res = AARTSAAPI_CloseDevice( &mParent->mAPIHandle, &mDeviceHandle );
+        if ( res != AARTSAAPI_OK )
+            LOG_DEBUG( "Failed to close device ({}): {}", getSerialNumber(), ResultToString( res ) );
+
+        mOpened = false;
+    }
+}
+
+DeviceWrapper::DeviceWrapper( std::shared_ptr<RTSAWrapper> parent, DeviceType deviceType, const AARTSAAPI_DeviceInfo &dinfo )
+    : mParent( parent ),
+      mDeviceType( deviceType ),
+      mSerialNumberW( dinfo.serialNumber ),
+      mSerialNumber( mSerialNumberW.cbegin(), mSerialNumberW.cend() ),
+      mReady( dinfo.ready ),
+      mBoost( dinfo.boost ),
+      mSuperSpeed( dinfo.superspeed ),
+      mActive( dinfo.active )
+{
+}
+
+DeviceWrapper::~DeviceWrapper()
+{
+    close();
+}
+
+ConfigNode DeviceWrapper::getConfigRoot()
+{
+    if ( !mOpened )
+        throw std::runtime_error( "Can only read config of open devices!" );
+
+    AARTSAAPI_Config cfg;
+
+    AARTSAAPI_Result res = AARTSAAPI_ConfigRoot( &mDeviceHandle, &cfg );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to get config root element of {}: {}", mSerialNumber, ResultToString( res ) ) );
+
+    return ConfigNode( this->shared_from_this(), cfg, "/" );
+}
+
+ConfigNode DeviceWrapper::getHealthRoot()
+{
+    if ( !mOpened )
+        throw std::runtime_error( "Can only read config of open devices!" );
+
+    AARTSAAPI_Config cfg;
+
+    AARTSAAPI_Result res = AARTSAAPI_ConfigHealth( &mDeviceHandle, &cfg );
+    if ( res != AARTSAAPI_OK )
+        throw std::runtime_error( fmt::format( "Failed to get health root element of {}: {}", mSerialNumber, ResultToString( res ) ) );
+
+    return ConfigNode( this->shared_from_this(), cfg, "/" );
 }
 
 RTSAWrapper::RTSAWrapper( const MemoryMode memoryMode )
@@ -92,15 +369,29 @@ RTSAWrapper::~RTSAWrapper()
     AARTSAAPI_Shutdown();
 }
 
-static const wchar_t *const DEVICE_TYPE_IDs[] = {
-    L"spectranv6" };
-
-std::vector<DeviceWrapper> RTSAWrapper::getAllDevices( const DeviceType deviceType, bool rescan, int timeout )
+std::shared_ptr<DeviceWrapper> RTSAWrapper::getDevice( DeviceType deviceType, const std::string &serialNumber, int timeout )
 {
-    std::vector<DeviceWrapper> devices;
+    for ( auto &dev : mDevices )
+    {
+        auto ptr = dev.lock();
+        if ( !ptr )
+            continue;
+
+        if ( ptr->mDeviceType != deviceType )
+            continue;
+
+        if ( serialNumber.size() > 0 && ptr->mSerialNumber != serialNumber )
+            continue;
+
+        if ( ptr->mOpened )
+            LOG_DEBUG( "Warning: RTSAWrapper::getDevice was used to get a handle on a device which was already opened!" );
+
+        return ptr;
+    }
 
     AARTSAAPI_Result res;
-    while ( rescan )
+
+    while ( true )
     {
         res = AARTSAAPI_RescanDevices( &mAPIHandle, timeout );
         if ( res == AARTSAAPI_RETRY )
@@ -109,13 +400,74 @@ std::vector<DeviceWrapper> RTSAWrapper::getAllDevices( const DeviceType deviceTy
         if ( res != AARTSAAPI_OK )
             throw std::runtime_error( fmt::format( "Failed to scan for devices: {}", ResultToString( res ) ) );
 
-        AARTSAAPI_DeviceInfo dinfo{};
-        dinfo.cbsize = sizeof( AARTSAAPI_DeviceInfo );
-
-        for ( int i = 0; AARTSAAPI_EnumDevice( &mAPIHandle, DEVICE_TYPE_IDs[static_cast<int>( deviceType )], i, &dinfo ) == AARTSAAPI_OK; i++ )
-            devices.emplace_back( this->shared_from_this(), dinfo );
-
         break;
+    }
+
+    AARTSAAPI_DeviceInfo dinfo{};
+    dinfo.cbsize = sizeof( AARTSAAPI_DeviceInfo );
+
+    for ( int i = 0; AARTSAAPI_EnumDevice( &mAPIHandle, DEVICE_TYPE_IDs[static_cast<int>( deviceType )], i, &dinfo ) == AARTSAAPI_OK; i++ )
+    {
+        if ( serialNumber.size() )
+        {
+            std::wstring devSerialW( dinfo.serialNumber );
+            std::string devSerial = WStringToString( devSerialW );
+
+            if ( serialNumber != devSerial )
+                continue;
+        }
+
+        if ( dinfo.active )
+            LOG_DEBUG( "Warning: RTSAWrapper::getDevice was used to get a handle on a device which was already opened!" );
+
+        auto ptr = DeviceWrapper::create( this->shared_from_this(), deviceType, dinfo );
+        mDevices.push_back( std::weak_ptr( ptr ) );
+        return ptr;
+    }
+
+    throw std::runtime_error( "Failed to find available device!" );
+}
+
+std::vector<std::shared_ptr<DeviceWrapper>> RTSAWrapper::getAllDevices( const DeviceType deviceType, bool rescan, int timeout )
+{
+    std::vector<std::shared_ptr<DeviceWrapper>> devices;
+
+    mDevices.clear();
+
+    if ( rescan )
+    {
+        AARTSAAPI_Result res;
+
+        while ( true )
+        {
+            res = AARTSAAPI_RescanDevices( &mAPIHandle, timeout );
+            if ( res == AARTSAAPI_RETRY )
+                continue;
+
+            if ( res != AARTSAAPI_OK )
+                throw std::runtime_error( fmt::format( "Failed to scan for devices: {}", ResultToString( res ) ) );
+
+            AARTSAAPI_DeviceInfo dinfo{};
+            dinfo.cbsize = sizeof( AARTSAAPI_DeviceInfo );
+
+            for ( int i = 0; AARTSAAPI_EnumDevice( &mAPIHandle, DEVICE_TYPE_IDs[static_cast<int>( deviceType )], i, &dinfo ) == AARTSAAPI_OK; i++ )
+            {
+                auto ptr = DeviceWrapper::create( this->shared_from_this(), deviceType, dinfo );
+                mDevices.push_back( std::weak_ptr( ptr ) );
+                devices.push_back( ptr );
+            }
+
+            break;
+        }
+    }
+    else
+    {
+        for ( auto &weakPtr : mDevices )
+        {
+            auto ptr = weakPtr.lock();
+            if ( ptr )
+                devices.push_back( ptr );
+        }
     }
 
     return devices;

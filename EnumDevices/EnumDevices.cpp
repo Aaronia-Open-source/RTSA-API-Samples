@@ -16,7 +16,11 @@ int main()
     std::cout << "Devices:" << std::endl;
     for ( auto &device : apiWrapper->getAllDevices( AAR::DeviceType::SPECTRANV6 ) )
         fmt::print( " - Serial Number: {}\n   ready: {}\n   boost: {}\n   superSpeed: {}\n   active: {}\n",
-                    device.getSerialNumber(), device.isReady(), device.hasBoost(), device.isSuperSpeed(), device.isActive() );
+                    device->getSerialNumber(),
+                    device->isReady(),
+                    device->hasBoost(),
+                    device->isSuperSpeed(),
+                    device->isActive() );
 
     return EXIT_SUCCESS;
 }
