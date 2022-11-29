@@ -1,2 +1,2 @@
 add_executable(EnumDevices EnumDevices.cpp)
-target_link_libraries(EnumDevices AaroniaRTSAAPI)
+target_link_libraries(EnumDevices AARTSAAPIWrapper)
