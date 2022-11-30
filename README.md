@@ -1,9 +1,8 @@
 # RTSA-API-Samples
 
-RTSA-API-Samples
-This repository provides examples on how to use the RTSA Suite Pro API on Linux systems. All examples from the existing Windows API examples have been ported to Linux & CMake.
+This repository provides examples on how to use the RTSA Suite PRO API on Linux systems. All examples from the existing Windows API examples have been ported to Linux & CMake.
 
-It’s required to install the Linux version of the RTSA-Suite pro, the CMake file will search in the following folders for the .so file: 
+It’s required to install the Linux version of the RTSA-Suite PRO, the CMake file will search in the following folders for the .so file: 
 
 ```
 /opt/Aaronia/RTSA/Aaronia-RTSA-Suite-PRO
