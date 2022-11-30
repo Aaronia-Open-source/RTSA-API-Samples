@@ -14,3 +14,5 @@ $ENV{HOME}/Aaronia/RTSA/Aaronia-RTSA-Suite-PRO
 
 https://github.com/Aaronia-Open-source/RTSA-API-Samples/blob/main/RawIQWrapped/RawIQWrapped.cpp will give you an easy start on how to use the API.
 
+
+For questions&issues please use the https://v6-forum.aaronia.de/ instead of the GitHub's Issues feature.
