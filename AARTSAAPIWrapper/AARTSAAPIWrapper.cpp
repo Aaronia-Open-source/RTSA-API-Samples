@@ -1,7 +1,6 @@
 #include "AARTSAAPIWrapper.h"
 
 #include <fmt/core.h>
-#include <fmt/xchar.h>
 
 #include <chrono>
 #include <cstdio>
@@ -70,16 +69,19 @@ static const char *const ERROR_MESSAGES[] = {
     "Error: Value is invalid!",
     "Error: Value is malformed!" };
 
-static const wchar_t *const DEVICE_TYPE_IDs[] = {
+static const wchar_t *const WDEVICE_TYPE_IDs[] = {
     L"spectranv6" };
 
-static const wchar_t *const DEVICE_MODE_IDs[] = {
-    L"raw",
-    L"rtsa",
-    L"sweepsa",
-    L"iqreceiver",
-    L"iqtransmitter",
-    L"iqtransceiver" };
+static const char *const DEVICE_TYPE_IDs[] = {
+    "spectranv6" };
+
+static const char *const DEVICE_MODE_IDs[] = {
+    "raw",
+    "rtsa",
+    "sweepsa",
+    "iqreceiver",
+    "iqtransmitter",
+    "iqtransceiver" };
 
 static const char *const TYPE_NAMES[] = {
     "Other",
@@ -319,7 +321,7 @@ void DeviceWrapper::open( DeviceMode mode )
     if ( mOpened )
         throw std::runtime_error( "Device already open!" );
 
-    std::wstring deviceString = fmt::format( L"{}/{}", DEVICE_TYPE_IDs[static_cast<int>( mDeviceType )], DEVICE_MODE_IDs[static_cast<int>( mode )] );
+    std::wstring deviceString = StringToWString(fmt::format( "{}/{}", DEVICE_TYPE_IDs[static_cast<int>( mDeviceType )], DEVICE_MODE_IDs[static_cast<int>( mode )] ));
     AARTSAAPI_Result res = AARTSAAPI_OpenDevice( &mParent->mAPIHandle, &mDeviceHandle,
                                                  deviceString.c_str(),
                                                  mSerialNumberW.c_str() );
@@ -576,7 +578,7 @@ std::shared_ptr<DeviceWrapper> RTSAWrapper::getDevice( DeviceType deviceType, co
     AARTSAAPI_DeviceInfo dinfo{};
     dinfo.cbsize = sizeof( AARTSAAPI_DeviceInfo );
 
-    for ( int i = 0; AARTSAAPI_EnumDevice( &mAPIHandle, DEVICE_TYPE_IDs[static_cast<int>( deviceType )], i, &dinfo ) == AARTSAAPI_OK; i++ )
+    for ( int i = 0; AARTSAAPI_EnumDevice( &mAPIHandle, WDEVICE_TYPE_IDs[static_cast<int>( deviceType )], i, &dinfo ) == AARTSAAPI_OK; i++ )
     {
         if ( serialNumber.size() )
         {
@@ -620,7 +622,7 @@ std::vector<std::shared_ptr<DeviceWrapper>> RTSAWrapper::getAllDevices( const De
             AARTSAAPI_DeviceInfo dinfo{};
             dinfo.cbsize = sizeof( AARTSAAPI_DeviceInfo );
 
-            for ( int i = 0; AARTSAAPI_EnumDevice( &mAPIHandle, DEVICE_TYPE_IDs[static_cast<int>( deviceType )], i, &dinfo ) == AARTSAAPI_OK; i++ )
+            for ( int i = 0; AARTSAAPI_EnumDevice( &mAPIHandle, WDEVICE_TYPE_IDs[static_cast<int>( deviceType )], i, &dinfo ) == AARTSAAPI_OK; i++ )
             {
                 auto ptr = DeviceWrapper::create( this->shared_from_this(), deviceType, dinfo );
                 mDevices.push_back( std::weak_ptr( ptr ) );
