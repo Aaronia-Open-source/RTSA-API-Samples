@@ -67,5 +67,6 @@ add_subdirectory(RawSpectrum)
 add_subdirectory(SweepSpectrum)
 add_subdirectory(SweepStressTest)
 add_subdirectory(TransferRate)
+add_subdirectory(Generator)
 
 
