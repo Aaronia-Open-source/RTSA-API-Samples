@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(rtsaapi_samples)
 
 set(RTSA_INSTALLATION_DIRECTORY
-    $ENV{HOME}/Aaronia/RTSA/Aaronia-RTSA-Suite-PRO
+    /opt/aaronia-rtsa-suite/Aaronia-RTSA-Suite-PRO
     CACHE
     PATH
     "Installation directory of the Aaronia RTSA Software Suite")
@@ -16,7 +16,7 @@ list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_SOURCE_DIR}/cmake)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     # using Clang
-    set(CMAKE_CXX_FLAGS "march=native -mtune=native -mavx2")
+    set(CMAKE_CXX_FLAGS "-march=native -mtune=native -mavx2")
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # using GCC

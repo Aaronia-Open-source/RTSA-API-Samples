@@ -17,4 +17,4 @@ message(DEBUG "RTSA installation directory: ${RTSA_INSTALL_DIRECTORY}")
 
 add_library(AaroniaRTSAAPI SHARED IMPORTED)
 set_target_properties(AaroniaRTSAAPI PROPERTIES IMPORTED_LOCATION "${RTSAAPI_LIB}")
-target_include_directories(AaroniaRTSAAPI INTERFACE "${RTSA_INSTALL_DIRECTORY}")
+target_include_directories(AaroniaRTSAAPI INTERFACE "${RTSA_INSTALL_DIRECTORY}/sdk")
