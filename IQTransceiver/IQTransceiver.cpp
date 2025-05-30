@@ -1,187 +1,190 @@
-#include <aaroniartsaapi.h>
+#include "../helper.h"
 
-#include <chrono>
-#include <iostream>
-#include <string>
-#include <thread>
-
-void streamIQ( AARTSAAPI_Device d )
+void streamIQ(AARTSAAPI_Device d)
 {
-    // Prepare output packet
-    AARTSAAPI_Packet packet = { sizeof( AARTSAAPI_Packet ) };
+	// Prepare output packet
+	AARTSAAPI_Packet	packet = { sizeof(AARTSAAPI_Packet) };
 
-    // Stream 1000 packets
+	// Stream 1000 packets
 
-    int NumPackets = 1000;
+	int NumPackets = 1000;
 
-    for ( int i = 0; i < NumPackets; i++ )
-    {
-        AARTSAAPI_Result res;
+	for (int i = 0; i < NumPackets; i++)
+	{
+		AARTSAAPI_Result	res;
 
-        // Get the next data packet, sleep for some milliseconds, if none
-        // available yet.
+		// Get the next data packet, sleep for some milliseconds, if none
+		// available yet.
 
-        while ( ( res = AARTSAAPI_GetPacket( &d, 0, 0, &packet ) ) == AARTSAAPI_EMPTY )
-            std::this_thread::sleep_for( std::chrono::milliseconds( 5 ) );
+		while ((res = AARTSAAPI_GetPacket(&d, 0, 0, &packet)) == AARTSAAPI_EMPTY)
+			std::this_thread::sleep_for( std::chrono::milliseconds(5));
 
-        // If we actually got a packet
+		// If we actually got a packet
 
-        if ( res == AARTSAAPI_OK )
-        {
-            // Get the current system time
+		if (res == AARTSAAPI_OK)
+		{
+			// Get the current system time
 
-            double streamTime;
-            AARTSAAPI_GetMasterStreamTime( &d, streamTime );
+			double	streamTime;
+			AARTSAAPI_GetMasterStreamTime(&d, streamTime);
 
-            // Check if we are still close to the capture stream
+			// Check if we are still close to the capture stream
 
-            if ( packet.startTime > streamTime - 0.1 )
-            {
-                // Push packet into future for buffering
+			if (packet.startTime > streamTime - 0.1)
+			{
+				// Push packet into future for buffering
 
-                packet.startTime += 0.2;
-                packet.endTime += 0.2;
+				packet.startTime += 0.2;
+				packet.endTime += 0.2;
 
-                // New center frequency
+				// New center frequency
 
-                packet.startFrequency = 2450.0e6 - 0.5 * packet.stepFrequency;
+				packet.startFrequency = 2450.0e6 - 0.5 * packet.stepFrequency;
 
-                // Send packet to transmitter queue
+				// Send packet to transmitter queue
 
-                AARTSAAPI_SendPacket( &d, 0, &packet );
-            }
-        }
+				AARTSAAPI_SendPacket(&d, 0, &packet);
+			}
+		}
 
-        // Consume the packet from the receiver queue
+		// Consume the packet from the receiver queue
 
-        AARTSAAPI_ConsumePackets( &d, 0, 1 );
-    }
+		AARTSAAPI_ConsumePackets(&d, 0, 1);
+	}
 }
 
 int main()
 {
-    AARTSAAPI_Result res;
+	if (LoadRTSAAPI_with_searchpath() != 0)
+	{
+		std::wcerr << "Load RTSSAPI failed";
+		return - 1; 
+	}
 
-    // Initialize library for large memory usage
+	AARTSAAPI_Result	res;
 
-    if ( ( res = AARTSAAPI_Init( AARTSAAPI_MEMORY_LARGE ) ) == AARTSAAPI_OK )
-    {
+	// Initialize library for large memory usage
 
-        // Open a library handle for use by this application
+	if ((res = AARTSAAPI_Init_With_Path(AARTSAAPI_MEMORY_MEDIUM, CFG_AARONIA_XML_LOOKUP_DIRECTORY)) == AARTSAAPI_OK)
+	{
 
-        AARTSAAPI_Handle h;
+		// Open a library handle for use by this application
 
-        if ( ( res = AARTSAAPI_Open( &h ) ) == AARTSAAPI_OK )
-        {
-            // Rescan all devices controlled by the aaronia library and update
-            // the firmware if required.
+		AARTSAAPI_Handle	h;
 
-            if ( ( res = AARTSAAPI_RescanDevices( &h, 2000 ) ) == AARTSAAPI_OK )
-            {
-                AARTSAAPI_DeviceInfo dinfo = { sizeof( AARTSAAPI_DeviceInfo ) };
+		if ((res = AARTSAAPI_Open(&h)) == AARTSAAPI_OK)
+		{
+			// Rescan all devices controlled by the aaronia library and update
+			// the firmware if required.
 
-                // Get the serial number of the first V6 in the system
+			if ((res = AARTSAAPI_RescanDevices(&h, 4000)) == AARTSAAPI_OK)
+			{
+				AARTSAAPI_DeviceInfo	dinfo = { sizeof(AARTSAAPI_DeviceInfo) };
 
-                if ( ( res = AARTSAAPI_EnumDevice( &h, L"spectranv6", 0, &dinfo ) ) == AARTSAAPI_OK )
-                {
-                    AARTSAAPI_Device d;
+				// Get the serial number of the first V6 in the system
 
-                    // Try to open the first V6 in the system in transmitter mode
+				if ((res = AARTSAAPI_EnumDevice(&h, L"spectranv6", 0, &dinfo)) == AARTSAAPI_OK)
+				{
+					AARTSAAPI_Device	d;
 
-                    if ( ( res = AARTSAAPI_OpenDevice( &h, &d, L"spectranv6/iqtransceiver", dinfo.serialNumber ) ) == AARTSAAPI_OK )
-                    {
-                        AARTSAAPI_Config config, root;
+					// Try to open the first V6 in the system in transmitter mode
 
-                        if ( AARTSAAPI_ConfigRoot( &d, &root ) == AARTSAAPI_OK )
-                        {
-                            // Select the first receiver channel
+					if ((res = AARTSAAPI_OpenDevice(&h, &d, L"spectranv6/iqtransceiver", dinfo.serialNumber)) == AARTSAAPI_OK)
+					{
+						AARTSAAPI_Config	config, root;
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"device/receiverchannel" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetString( &d, &config, L"Rx1" );
+						if (AARTSAAPI_ConfigRoot(&d, &root) == AARTSAAPI_OK)
+						{
+							// Select the first receiver channel
 
-                            // Select the center frequency of the tuner
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"device/receiverchannel") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetString(&d, &config, L"Rx1");
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"main/centerfreq" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetFloat( &d, &config, 2440.0e6 );
+							// Select the center frequency of the tuner
 
-                            // Select the frequency range of the tuner
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"main/centerfreq") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetFloat(&d, &config, 2440.0e6);
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"main/spanfreq" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetFloat( &d, &config, 50.0e6 );
+							// Select the frequency range of the tuner
 
-                            // Select the frequency range of the receiver demodulator to pick up a
-                            // frequency range from the input stream
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"main/spanfreq") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetFloat(&d, &config, 50.0e6);
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"main/demodcenterfreq" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetFloat( &d, &config, 2430.0e6 );
+							// Select the frequency range of the receiver demodulator to pick up a
+							// frequency range from the input stream
 
-                            // Select the frequency span of the receiver demodulator
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"main/demodcenterfreq") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetFloat(&d, &config, 2430.0e6);
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"main/demodspanfreq" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetFloat( &d, &config, 2.0e6 );
+							// Select the frequency span of the receiver demodulator
 
-                            // Select the transmitter gain
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"main/demodspanfreq") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetFloat(&d, &config, 2.0e6);
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"main/transgain" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetFloat( &d, &config, 0.0 );
+							// Select the transmitter gain
 
-                            // Connect to the physical device
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"main/transgain") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetFloat(&d, &config, 0.0);
 
-                            if ( ( res = AARTSAAPI_ConnectDevice( &d ) ) == AARTSAAPI_OK )
-                            {
-                                // Start the receiver
+							// Connect to the physical device
 
-                                if ( AARTSAAPI_StartDevice( &d ) == AARTSAAPI_OK )
-                                {
-                                    // Wait for the transceiver running
+							if ((res = AARTSAAPI_ConnectDevice(&d)) == AARTSAAPI_OK)
+							{
+								// Start the receiver
 
-                                    while ( AARTSAAPI_GetDeviceState( &d ) != AARTSAAPI_RUNNING )
-                                    {
-                                        std::wcout << ".";
-                                        std::wcout.flush();
-                                        std::this_thread::sleep_for( std::chrono::milliseconds( 100 ) );
-                                    }
-                                    std::wcout << std::endl;
+								if (AARTSAAPI_StartDevice(&d) == AARTSAAPI_OK)
+								{
+									// Wait for the transceiver running
 
-                                    // Send data to the transceiver
+									while (AARTSAAPI_GetDeviceState(&d) != AARTSAAPI_RUNNING)
+									{
+										std::wcout << ".";
+										std::wcout.flush();
+										std::this_thread::sleep_for( std::chrono::milliseconds(100));
+										std::wcout << AARTSAAPI_GetDeviceState(&d);
+									}
+									std::wcout << std::endl;
 
-                                    streamIQ( d );
-                                }
+									// Send data to the transceiver
 
-                                // Release the hardware
+									streamIQ(d);
+								}
 
-                                AARTSAAPI_DisconnectDevice( &d );
-                            }
-                            else
-                                std::wcerr << "AARTSAAPI_ConnectDevice failed : " << std::hex << res << std::endl;
-                        }
+								// Release the hardware
 
-                        // Close the device handle
+								AARTSAAPI_DisconnectDevice(&d);
+							}
+							else
+								std::wcerr << "AARTSAAPI_ConnectDevice failed : " << std::hex << res << std::endl;
 
-                        AARTSAAPI_CloseDevice( &h, &d );
-                    }
-                    else
-                        std::wcerr << "AARTSAAPI_OpenDevice failed : " << std::hex << res << std::endl;
-                }
-                else
-                    std::wcerr << "AARTSAAPI_EnumDevice failed : " << std::hex << res << std::endl;
-            }
-            else
-                std::wcerr << "AARTSAAPI_RescanDevices failed : " << std::hex << res << std::endl;
+						}
 
-            // Close the library handle
+						// Close the device handle
 
-            AARTSAAPI_Close( &h );
-        }
-        else
-            std::wcerr << "AARTSAAPI_Open failed : " << std::hex << res << std::endl;
+						AARTSAAPI_CloseDevice(&h, &d);
+					}
+					else
+						std::wcerr << "AARTSAAPI_OpenDevice failed : " << std::hex << res << std::endl;
+				}
+				else
+					std::wcerr << "AARTSAAPI_EnumDevice failed : " << std::hex << res << std::endl;
+			}
+			else
+				std::wcerr << "AARTSAAPI_RescanDevices failed : " << std::hex << res << std::endl;
 
-        // Shutdown library, release resources
+			// Close the library handle
 
-        AARTSAAPI_Shutdown();
-    }
-    else
-        std::wcerr << "AARTSAAPI_Init failed : " << std::hex << res << std::endl;
+			AARTSAAPI_Close(&h);
+		}
+		else
+			std::wcerr << "AARTSAAPI_Open failed : " << std::hex << res << std::endl;
 
-    return 0;
+		// Shutdown library, release resources
+
+		AARTSAAPI_Shutdown();
+	}
+	else
+		std::wcerr << "AARTSAAPI_Init failed : " << std::hex << res << std::endl;
+
+	return 0;
 }

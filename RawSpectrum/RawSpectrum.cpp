@@ -1,189 +1,210 @@
-#include <aaroniartsaapi.h>
+#include "../helper.h"
 
-#include <chrono>
-#include <iostream>
-#include <string>
-#include <thread>
 
-void streamSpectra( AARTSAAPI_Device d )
+void streamSpectra(AARTSAAPI_Device d)
 {
-    // ASCII art brightness levels
+	// ASCII art brightness levels
 
-    static const wchar_t *hlevels = L"$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/|()1{}[]?-_+~<>i!lI;:,\"^`'. ";
+	static const wchar_t* hlevels = L"$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/|()1{}[]?-_+~<>i!lI;:,\"^`'. ";
 
-    // Test 1k spectra packets
+	// Test 1k spectra packets
 
-    for ( int i = 0; i < 1000; i++ )
-    {
-        // Prepare data packet
+	for (int i = 0; i < 1000; i++)
+	{
+		// Prepare data packet
+		
+		AARTSAAPI_Packet	packet = { sizeof(AARTSAAPI_Packet) };
+		AARTSAAPI_Result	res;
 
-        AARTSAAPI_Packet packet = { sizeof( AARTSAAPI_Packet ) };
-        AARTSAAPI_Result res;
+		// Get the next data packet, sleep for some milliseconds, if none
+		// available yet.  We use channel 2, which is the Rx1 spectra output
 
-        // Get the next data packet, sleep for some milliseconds, if none
-        // available yet.  We use channel 2, which is the Rx1 spectra output
+		while ((res = AARTSAAPI_GetPacket(&d, 2, 0, &packet)) == AARTSAAPI_EMPTY)
+			std::this_thread::sleep_for( std::chrono::milliseconds(5));
 
-        while ( ( res = AARTSAAPI_GetPacket( &d, 2, 0, &packet ) ) == AARTSAAPI_EMPTY )
-            std::this_thread::sleep_for( std::chrono::milliseconds( 5 ) );
+		// If we actually got a packet
 
-        // If we actually got a packet
+		if (res == AARTSAAPI_OK)
+		{
+			const float* fp = packet.fp32;
 
-        if ( res == AARTSAAPI_OK )
-        {
-            const float *fp = packet.fp32;
+			for(int s=0; s<packet.num; s++)
+			{
+				wchar_t	buff[129];
 
-            for ( int s = 0; s < packet.num; s++ )
-            {
-                wchar_t buff[129];
+				int	k = 0;
+				for (int j = 0; j < 128; j++)
+				{
+					int	l = int(packet.size) * (j + 1) / 128;
+					float	mv = -200.0;
+					for (int n = k; n < l; n++)
+						if (fp[n] > mv)
+							mv = fp[n];
+					k = l;
 
-                int k = 0;
-                for ( int j = 0; j < 128; j++ )
-                {
-                    int l = int( packet.size ) * ( j + 1 ) / 128;
-                    float mv = -200.0;
-                    for ( int n = k; n < l; n++ )
-                        if ( fp[n] > mv )
-                            mv = fp[n];
-                    k = l;
+					int	 mi = -int(mv + 10);
+					if (mi >= 0 && mi < 69)
+						buff[j] = hlevels[mi];
+					else
+						buff[j] = L'_';
+				}
 
-                    int mi = -int( mv + 10 );
-                    if ( mi >= 0 && mi < 70 )
-                        buff[j] = hlevels[mi];
-                    else
-                        buff[j] = L'_';
-                }
+				buff[128] = 0;
+				std::wcout << "[" << buff << "]" << std::endl;
 
-                buff[128] = 0;
-                std::wcout << buff << std::endl;
+				// Advance to next sample
 
-                // Advance to next sample
+				fp += packet.stride;
+			}
 
-                fp += packet.stride;
-            }
+			// Remove the first packet from the packet queue
 
-            // Remove the first packet from the packet queue
+			AARTSAAPI_ConsumePackets(&d, 2, 1);
+		}
+		else
+			break;
+	}
 
-            AARTSAAPI_ConsumePackets( &d, 2, 1 );
-        }
-        else
-            break;
-    }
 }
 
 int main()
 {
-    AARTSAAPI_Result res;
+	if (LoadRTSAAPI_with_searchpath() != 0)
+	{
+		std::wcerr << "Load RTSSAPI failed";
+		return - 1; 
+	}
 
-    // Initialize library for medium memory usage
+	AARTSAAPI_Result	res;
 
-    if ( ( res = AARTSAAPI_Init( AARTSAAPI_MEMORY_MEDIUM ) ) == AARTSAAPI_OK )
-    {
+	// Initialize library for medium memory usage
 
-        // Open a library handle for use by this application
+	if ((res = AARTSAAPI_Init_With_Path(AARTSAAPI_MEMORY_MEDIUM, CFG_AARONIA_XML_LOOKUP_DIRECTORY)) == AARTSAAPI_OK)
+	{
 
-        AARTSAAPI_Handle h;
+		// Open a library handle for use by this application
 
-        if ( ( res = AARTSAAPI_Open( &h ) ) == AARTSAAPI_OK )
-        {
-            // Rescan all devices controlled by the aaronia library and update
-            // the firmware if required.
+		AARTSAAPI_Handle	h;
 
-            if ( ( res = AARTSAAPI_RescanDevices( &h, 2000 ) ) == AARTSAAPI_OK )
-            {
-                // Get the serial number of the first V6 in the system
+		if ((res = AARTSAAPI_Open(&h)) == AARTSAAPI_OK)
+		{
+			// Rescan all devices controlled by the aaronia library and update
+			// the firmware if required.
 
-                AARTSAAPI_DeviceInfo dinfo = { sizeof( AARTSAAPI_DeviceInfo ) };
+			if ((res = AARTSAAPI_RescanDevices(&h, 2000)) == AARTSAAPI_OK)
+			{
+				// Get the serial number of the first V6 in the system
 
-                if ( ( res = AARTSAAPI_EnumDevice( &h, L"spectranv6", 0, &dinfo ) ) == AARTSAAPI_OK )
-                {
-                    AARTSAAPI_Device d;
+				AARTSAAPI_DeviceInfo	dinfo = { sizeof(AARTSAAPI_DeviceInfo) };
 
-                    // Try to open the first V6 in the system in raw mode
+				if ((res = AARTSAAPI_EnumDevice(&h, L"spectranv6", 0, &dinfo)) == AARTSAAPI_OK)
+				{
+					AARTSAAPI_Device	d;
 
-                    if ( ( res = AARTSAAPI_OpenDevice( &h, &d, L"spectranv6/raw", dinfo.serialNumber ) ) == AARTSAAPI_OK )
-                    {
-                        // Begin configuration, get root of configuration tree
+					// Try to open the first V6 in the system in raw mode
 
-                        AARTSAAPI_Config config, root;
+					if ((res = AARTSAAPI_OpenDevice(&h, &d, L"spectranv6/raw", dinfo.serialNumber)) == AARTSAAPI_OK)
+					{
+						// Begin configuration, get root of configuration tree
 
-                        if ( AARTSAAPI_ConfigRoot( &d, &root ) == AARTSAAPI_OK )
-                        {
-                            // Select the first receiver channel
+						AARTSAAPI_Config	config, root;
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"device/receiverchannel" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetString( &d, &config, L"Rx1" );
+						if (AARTSAAPI_ConfigRoot(&d, &root) == AARTSAAPI_OK)
+						{
+							// Select the first receiver channel
 
-                            // Select spectra as output format
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"device/receiverchannel") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetString(&d, &config, L"Rx1");
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"device/outputformat" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetString( &d, &config, L"spectra" );
+							// Select spectra as output format
 
-                            // Use slow receiver clock
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"device/outputformat") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetString(&d, &config, L"spectra");
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"device/receiverclock" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetString( &d, &config, L"92MHz" );
+							// Use slow receiver clock
 
-                            // Combine spectras using maximum per FFT bin
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"device/receiverclock") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetString(&d, &config, L"92MHz");
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"device/fft0/fftmergemode" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetString( &d, &config, L"max" );
+							// Combine spectras using maximum per FFT bin
 
-                            // Merge 100 input spectra for one output sample
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"device/fft0/fftmergemode") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetString(&d, &config, L"max");
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"device/fft0/fftaggregate" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetInteger( &d, &config, 100 );
+							// Merge 100 input spectra for one output sample
 
-                            // Connect to the physical device
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"device/fft0/fftaggregate") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetInteger(&d, &config, 100);
 
-                            if ( ( res = AARTSAAPI_ConnectDevice( &d ) ) == AARTSAAPI_OK )
-                            {
-                                // Start the receiver
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"calibration/preamp") == AARTSAAPI_OK)
+							{
+								AARTSAAPI_ConfigSetString(&d, &config, L"Auto");
+							}
 
-                                if ( AARTSAAPI_StartDevice( &d ) == AARTSAAPI_OK )
-                                {
-                                    // Receive some spectra
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"main/reflevel") == AARTSAAPI_OK)
+							{
+								AARTSAAPI_ConfigInfo	info;
+								AARTSAAPI_ConfigGetInfo(&d, &config, &info);
 
-                                    streamSpectra( d );
+								double	dd;
+								AARTSAAPI_ConfigSetFloat(&d, &config, -20);
+								AARTSAAPI_ConfigGetFloat(&d, &config, &dd);
 
-                                    // Stop the receiver
+								std::wcerr << "RefLevel" << info.minValue << " " << info.maxValue << " " << dd << std::endl;
+							}
 
-                                    AARTSAAPI_StopDevice( &d );
-                                }
+							// Connect to the physical device
 
-                                // Release the hardware
+							if ((res = AARTSAAPI_ConnectDevice(&d)) == AARTSAAPI_OK)
+							{
+								// Start the receiver
 
-                                AARTSAAPI_DisconnectDevice( &d );
-                            }
-                            else
-                                std::wcerr << "AARTSAAPI_ConnectDevice failed : " << std::hex << res << std::endl;
-                        }
+								if (AARTSAAPI_StartDevice(&d) == AARTSAAPI_OK)
+								{
+									// Receive some spectra
 
-                        // Close the device handle
+									streamSpectra(d);
 
-                        AARTSAAPI_CloseDevice( &h, &d );
-                    }
-                    else
-                        std::wcerr << "AARTSAAPI_OpenDevice failed : " << std::hex << res << std::endl;
-                }
-                else
-                    std::wcerr << "AARTSAAPI_EnumDevice failed : " << std::hex << res << std::endl;
-            }
-            else
-                std::wcerr << "AARTSAAPI_RescanDevices failed : " << std::hex << res << std::endl;
+									// Stop the receiver
 
-            // Close the library handle
+									AARTSAAPI_StopDevice(&d);
+								}
 
-            AARTSAAPI_Close( &h );
-        }
-        else
-            std::wcerr << "AARTSAAPI_Open failed : " << std::hex << res << std::endl;
+								// Release the hardware
 
-        // Shutdown library, release resources
+								AARTSAAPI_DisconnectDevice(&d);
+							}
+							else
+								std::wcerr << "AARTSAAPI_ConnectDevice failed : " << std::hex << res << std::endl;
 
-        AARTSAAPI_Shutdown();
-    }
-    else
-        std::wcerr << "AARTSAAPI_Init failed : " << std::hex << res << std::endl;
+						}
 
-    return 0;
+						// Close the device handle
+
+						AARTSAAPI_CloseDevice(&h, &d);
+					}
+					else
+						std::wcerr << "AARTSAAPI_OpenDevice failed : " << std::hex << res << std::endl;
+				}
+				else
+					std::wcerr << "AARTSAAPI_EnumDevice failed : " << std::hex << res << std::endl;
+			}
+			else
+				std::wcerr << "AARTSAAPI_RescanDevices failed : " << std::hex << res << std::endl;
+
+			// Close the library handle
+
+			AARTSAAPI_Close(&h);
+		}
+		else
+			std::wcerr << "AARTSAAPI_Open failed : " << std::hex << res << std::endl;
+
+		// Shutdown library, release resources
+
+		AARTSAAPI_Shutdown();
+	}
+	else
+		std::wcerr << "AARTSAAPI_Init failed : " << std::hex << res << std::endl;
+
+	return 0;
 }

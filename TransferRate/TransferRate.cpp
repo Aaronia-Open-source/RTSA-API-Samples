@@ -1,149 +1,152 @@
-#include <aaroniartsaapi.h>
+#include "../helper.h"
 
-#include <chrono>
-#include <iostream>
-#include <string>
-#include <thread>
 
-void measureTransfer( AARTSAAPI_Device d )
+void measureTransfer(AARTSAAPI_Device d)
 {
 
-    for ( int i = 0; i < 100; i++ )
-    {
-        AARTSAAPI_Config config, root;
+	for (int i = 0; i < 100; i++)
+	{
+		AARTSAAPI_Config	config, root;
 
-        double usb1 = 0, usb2 = 0, samples = 0;
+		double	usb1 = 0, usb2 = 0, samples = 0;
 
-        // Update health data
+		// Update health data
 
-        if ( AARTSAAPI_ConfigHealth( &d, &root ) == AARTSAAPI_OK )
-        {
-            // Get main USB transfer rate
+		if (AARTSAAPI_ConfigHealth(&d, &root) == AARTSAAPI_OK)
+		{
+			// Get main USB transfer rate
 
-            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"mainusbbytessecond" ) == AARTSAAPI_OK )
-                AARTSAAPI_ConfigGetFloat( &d, &config, &usb1 );
+			if (AARTSAAPI_ConfigFind(&d, &root, &config, L"mainusbbytessecond") == AARTSAAPI_OK)
+				AARTSAAPI_ConfigGetFloat(&d, &config, &usb1);
 
-            // Get boost USB transfer rate
+			// Get boost USB transfer rate
 
-            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"boostusbbytessecond" ) == AARTSAAPI_OK )
-                AARTSAAPI_ConfigGetFloat( &d, &config, &usb2 );
+			if (AARTSAAPI_ConfigFind(&d, &root, &config, L"boostusbbytessecond") == AARTSAAPI_OK)
+				AARTSAAPI_ConfigGetFloat(&d, &config, &usb2);
 
-            // Get sample tramsfer rate
+			// Get sample tramsfer rate
 
-            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"rx1iqsamplessecond" ) == AARTSAAPI_OK )
-                AARTSAAPI_ConfigGetFloat( &d, &config, &samples );
+			if (AARTSAAPI_ConfigFind(&d, &root, &config, L"rx1iqsamplessecond") == AARTSAAPI_OK)
+				AARTSAAPI_ConfigGetFloat(&d, &config, &samples);
 
-            std::wcout << "Transfer " << i << " : " << usb1 << " + " << usb2 << " Samples: " << samples << std::endl;
-        }
+			std::wcout << "Transfer " << i << " : " << usb1 << " + " << usb2 << " Samples: " << samples << std::endl;
+		}
 
-        std::this_thread::sleep_for( std::chrono::milliseconds( 200 ) );
-    }
+		std::this_thread::sleep_for( std::chrono::milliseconds(200));
+	}
 }
 
 int main()
 {
-    AARTSAAPI_Result res;
+	if (LoadRTSAAPI_with_searchpath() != 0)
+	{
+		std::wcerr << "Load RTSSAPI failed";
+		return - 1; 
+	}
 
-    // Initialize library for medium memory usage
+	AARTSAAPI_Result	res;
 
-    if ( ( res = AARTSAAPI_Init( AARTSAAPI_MEMORY_MEDIUM ) ) == AARTSAAPI_OK )
-    {
+	// Initialize library for medium memory usage
 
-        // Open a library handle for use by this application
+	if ((res = AARTSAAPI_Init_With_Path(AARTSAAPI_MEMORY_MEDIUM, CFG_AARONIA_XML_LOOKUP_DIRECTORY)) == AARTSAAPI_OK)
+	{
 
-        AARTSAAPI_Handle h;
+		// Open a library handle for use by this application
 
-        if ( ( res = AARTSAAPI_Open( &h ) ) == AARTSAAPI_OK )
-        {
-            // Rescan all devices controlled by the aaronia library and update
-            // the firmware if required.
+		AARTSAAPI_Handle	h;
 
-            if ( ( res = AARTSAAPI_RescanDevices( &h, 2000 ) ) == AARTSAAPI_OK )
-            {
-                // Get the serial number of the first V6 in the system
+		if ((res = AARTSAAPI_Open(&h)) == AARTSAAPI_OK)
+		{
+			// Rescan all devices controlled by the aaronia library and update
+			// the firmware if required.
 
-                AARTSAAPI_DeviceInfo dinfo = { sizeof( AARTSAAPI_DeviceInfo ) };
+			if ((res = AARTSAAPI_RescanDevices(&h, 2000)) == AARTSAAPI_OK)
+			{
+				// Get the serial number of the first V6 in the system
 
-                if ( ( res = AARTSAAPI_EnumDevice( &h, L"spectranv6", 0, &dinfo ) ) == AARTSAAPI_OK )
-                {
-                    AARTSAAPI_Device d;
+				AARTSAAPI_DeviceInfo	dinfo = { sizeof(AARTSAAPI_DeviceInfo) };
 
-                    // Try to open the first V6 in the system in raw mode
+				if ((res = AARTSAAPI_EnumDevice(&h, L"spectranv6", 0, &dinfo)) == AARTSAAPI_OK)
+				{
+					AARTSAAPI_Device	d;
 
-                    if ( ( res = AARTSAAPI_OpenDevice( &h, &d, L"spectranv6/raw", dinfo.serialNumber ) ) == AARTSAAPI_OK )
-                    {
-                        // Begin configuration, get root of configuration tree
+					// Try to open the first V6 in the system in raw mode
 
-                        AARTSAAPI_Config config, root;
+					if ((res = AARTSAAPI_OpenDevice(&h, &d, L"spectranv6/raw", dinfo.serialNumber)) == AARTSAAPI_OK)
+					{
+						// Begin configuration, get root of configuration tree
 
-                        if ( AARTSAAPI_ConfigRoot( &d, &root ) == AARTSAAPI_OK )
-                        {
-                            // Select the first receiver channel
+						AARTSAAPI_Config	config, root;
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"device/receiverchannel" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetString( &d, &config, L"Rx1" );
+						if (AARTSAAPI_ConfigRoot(&d, &root) == AARTSAAPI_OK)
+						{
+							// Select the first receiver channel
 
-                            // Select iq as output format
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"device/receiverchannel") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetString(&d, &config, L"Rx1");
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"device/outputformat" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetString( &d, &config, L"iq" );
+							// Select iq as output format
 
-                            // Use fast receiver clock
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"device/outputformat") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetString(&d, &config, L"iq");
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"device/receiverclock" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetString( &d, &config, L"245MHz" );
+							// Use fast receiver clock
 
-                            // Connect to the physical device
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"device/receiverclock") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetString(&d, &config, L"245MHz");
 
-                            if ( ( res = AARTSAAPI_ConnectDevice( &d ) ) == AARTSAAPI_OK )
-                            {
-                                // Start the receiver
+							// Connect to the physical device
 
-                                if ( AARTSAAPI_StartDevice( &d ) == AARTSAAPI_OK )
-                                {
-                                    // Receive some spectra
+							if ((res = AARTSAAPI_ConnectDevice(&d)) == AARTSAAPI_OK)
+							{
+								// Start the receiver
 
-                                    measureTransfer( d );
+								if (AARTSAAPI_StartDevice(&d) == AARTSAAPI_OK)
+								{
+									// Receive some spectra
 
-                                    // Stop the receiver
+									measureTransfer(d);
 
-                                    AARTSAAPI_StopDevice( &d );
-                                }
+									// Stop the receiver
 
-                                // Release the hardware
+									AARTSAAPI_StopDevice(&d);
+								}
 
-                                AARTSAAPI_DisconnectDevice( &d );
-                            }
-                            else
-                                std::wcerr << "AARTSAAPI_ConnectDevice failed : " << std::hex << res << std::endl;
-                        }
+								// Release the hardware
 
-                        // Close the device handle
+								AARTSAAPI_DisconnectDevice(&d);
+							}
+							else
+								std::wcerr << "AARTSAAPI_ConnectDevice failed : " << std::hex << res << std::endl;
 
-                        AARTSAAPI_CloseDevice( &h, &d );
-                    }
-                    else
-                        std::wcerr << "AARTSAAPI_OpenDevice failed : " << std::hex << res << std::endl;
-                }
-                else
-                    std::wcerr << "AARTSAAPI_EnumDevice failed : " << std::hex << res << std::endl;
-            }
-            else
-                std::wcerr << "AARTSAAPI_RescanDevices failed : " << std::hex << res << std::endl;
+						}
 
-            // Close the library handle
+						// Close the device handle
 
-            AARTSAAPI_Close( &h );
-        }
-        else
-            std::wcerr << "AARTSAAPI_Open failed : " << std::hex << res << std::endl;
+						AARTSAAPI_CloseDevice(&h, &d);
+					}
+					else
+						std::wcerr << "AARTSAAPI_OpenDevice failed : " << std::hex << res << std::endl;
+				}
+				else
+					std::wcerr << "AARTSAAPI_EnumDevice failed : " << std::hex << res << std::endl;
+			}
+			else
+				std::wcerr << "AARTSAAPI_RescanDevices failed : " << std::hex << res << std::endl;
 
-        // Shutdown library, release resources
+			// Close the library handle
 
-        AARTSAAPI_Shutdown();
-    }
-    else
-        std::wcerr << "AARTSAAPI_Init failed : " << std::hex << res << std::endl;
+			AARTSAAPI_Close(&h);
+		}
+		else
+			std::wcerr << "AARTSAAPI_Open failed : " << std::hex << res << std::endl;
 
-    return 0;
+		// Shutdown library, release resources
+
+		AARTSAAPI_Shutdown();
+	}
+	else
+		std::wcerr << "AARTSAAPI_Init failed : " << std::hex << res << std::endl;
+
+	return 0;
 }

@@ -1,2 +1,0 @@
-add_executable(ConfigTreeWrapped ConfigTreeWrapped.cpp)
-target_link_libraries(ConfigTreeWrapped AARTSAAPIWrapper)

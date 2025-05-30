@@ -1,142 +1,141 @@
-#include <aaroniartsaapi.h>
-
-#include <chrono>
-#include <iostream>
-#include <string>
-#include <thread>
+#include "../helper.h"
 
 int main()
 {
-    AARTSAAPI_Result res;
+	if (LoadRTSAAPI_with_searchpath() != 0)
+	{
+		std::wcerr << "Load RTSSAPI failed";
+		return - 1; 
+	}
 
-    // Initialize library for medium memory usage
+	AARTSAAPI_Result	res;
 
-    if ( ( res = AARTSAAPI_Init( AARTSAAPI_MEMORY_MEDIUM ) ) == AARTSAAPI_OK )
-    {
+	// Initialize library for medium memory usage
 
-        // Open a library handle for use by this application
+	if ((res = AARTSAAPI_Init_With_Path(AARTSAAPI_MEMORY_MEDIUM, CFG_AARONIA_XML_LOOKUP_DIRECTORY)) == AARTSAAPI_OK)
+	{
 
-        AARTSAAPI_Handle h;
+		// Open a library handle for use by this application
 
-        if ( ( res = AARTSAAPI_Open( &h ) ) == AARTSAAPI_OK )
-        {
-            // Rescan all devices controlled by the aaronia library and update
-            // the firmware if required.
+		AARTSAAPI_Handle	h;
 
-            if ( ( res = AARTSAAPI_RescanDevices( &h, 2000 ) ) == AARTSAAPI_OK )
-            {
-                // Get the serial number of the first V6 in the system
+		if ((res = AARTSAAPI_Open(&h)) == AARTSAAPI_OK)
+		{
+			// Rescan all devices controlled by the aaronia library and update
+			// the firmware if required.
 
-                AARTSAAPI_DeviceInfo dinfo = { sizeof( AARTSAAPI_DeviceInfo ) };
+			if ((res = AARTSAAPI_RescanDevices(&h, 2000)) == AARTSAAPI_OK)
+			{
+				// Get the serial number of the first V6 in the system
 
-                if ( ( res = AARTSAAPI_EnumDevice( &h, L"spectranv6", 0, &dinfo ) ) == AARTSAAPI_OK )
-                {
-                    AARTSAAPI_Device d;
+				AARTSAAPI_DeviceInfo	dinfo = { sizeof(AARTSAAPI_DeviceInfo) };
 
-                    std::wcerr << "AARTSAAPI_OpenDevice : " << dinfo.serialNumber << std::endl;
+				if ((res = AARTSAAPI_EnumDevice(&h, L"spectranv6", 0, &dinfo)) == AARTSAAPI_OK)
+				{
+					AARTSAAPI_Device	d;
 
-                    // Try to open the first V6 in the system in raw mode
+					std::wcerr << "AARTSAAPI_OpenDevice : " << dinfo.serialNumber << std::endl;
 
-                    if ( ( res = AARTSAAPI_OpenDevice( &h, &d, L"spectranv6/raw", dinfo.serialNumber ) ) == AARTSAAPI_OK )
-                    {
-                        // Begin configuration, get root of configuration tree
+					// Try to open the first V6 in the system in raw mode
 
-                        AARTSAAPI_Config root, config, health;
+					if ((res = AARTSAAPI_OpenDevice(&h, &d, L"spectranv6/raw", dinfo.serialNumber)) == AARTSAAPI_OK)
+					{
+						// Begin configuration, get root of configuration tree
 
-                        if ( AARTSAAPI_ConfigRoot( &d, &root ) == AARTSAAPI_OK )
-                        {
-                            // Enable GPS Location and Time acquisition
+						AARTSAAPI_Config	root, config, health;
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"device/gpsmode" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetString( &d, &config, L"Location and Time" );
+						if (AARTSAAPI_ConfigRoot(&d, &root) == AARTSAAPI_OK)
+						{
+							// Enable GPS Location and Time acquisition
 
-                            // Select GPS time as the main source for the stream timing
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"device/gpsmode") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetString(&d, &config, L"Location and Time");
 
-                            if ( AARTSAAPI_ConfigFind( &d, &root, &config, L"device/sclksource" ) == AARTSAAPI_OK )
-                                AARTSAAPI_ConfigSetString( &d, &config, L"GPS Provider" );
+							// Select GPS time as the main source for the stream timing
 
-                            // Connect to the device
+							if (AARTSAAPI_ConfigFind(&d, &root, &config, L"device/sclksource") == AARTSAAPI_OK)
+								AARTSAAPI_ConfigSetString(&d, &config, L"GPS Provider");
 
-                            if ( ( res = AARTSAAPI_ConnectDevice( &d ) ) == AARTSAAPI_OK )
-                            {
-                                // Continuously poll the GPS state
+							// Connect to the device
 
-                                for ( int i = 0; i < 3600; i++ )
-                                {
-                                    if ( AARTSAAPI_ConfigHealth( &d, &health ) == AARTSAAPI_OK )
-                                    {
-                                        int64_t v;
+							if ((res = AARTSAAPI_ConnectDevice(&d)) == AARTSAAPI_OK)
+							{
+								// Continuously poll the GPS state
 
-                                        bool gpsTimeValid = false;
-                                        int gpsNumSats = 0;
-                                        double gpsTime = 0, gpsTimeOffset = 0;
+								for (int i = 0; i < 3600; i++)
+								{
+									if (AARTSAAPI_ConfigHealth(&d, &health) == AARTSAAPI_OK)
+									{
+										int64_t	v;
 
-                                        // Number of visible GPS satellites
+										bool	gpsTimeValid = false;
+										int		gpsNumSats = 0;
+										double	gpsTime = 0, gpsTimeOffset = 0;
 
-                                        if ( AARTSAAPI_ConfigFind( &d, &health, &config, L"gpssats" ) == AARTSAAPI_OK )
-                                        {
-                                            AARTSAAPI_ConfigGetInteger( &d, &config, &v );
-                                            gpsNumSats = v;
-                                        }
+										// Number of visible GPS satellites
 
-                                        // Time stamp provided by GPS is valid and second tick is precise
+										if (AARTSAAPI_ConfigFind(&d, &health, &config, L"gpssats") == AARTSAAPI_OK)
+										{
+											AARTSAAPI_ConfigGetInteger(&d, &config, &v); gpsNumSats = v;
+										}
 
-                                        if ( AARTSAAPI_ConfigFind( &d, &health, &config, L"gpstimevalid" ) == AARTSAAPI_OK )
-                                        {
-                                            AARTSAAPI_ConfigGetInteger( &d, &config, &v );
-                                            gpsTimeValid = v != 0;
-                                        }
+										// Time stamp provided by GPS is valid and second tick is precise
 
-                                        // Current GPS time in seconds since the start of the epoch
+										if (AARTSAAPI_ConfigFind(&d, &health, &config, L"gpstimevalid") == AARTSAAPI_OK)
+										{
+											AARTSAAPI_ConfigGetInteger(&d, &config, &v); gpsTimeValid = v != 0;
+										}
 
-                                        if ( AARTSAAPI_ConfigFind( &d, &health, &config, L"gpstime" ) == AARTSAAPI_OK )
-                                            AARTSAAPI_ConfigGetFloat( &d, &config, &gpsTime );
+										// Current GPS time in seconds since the start of the epoch
 
-                                        // Time offset between GPS time and stream time
+										if (AARTSAAPI_ConfigFind(&d, &health, &config, L"gpstime") == AARTSAAPI_OK)
+											AARTSAAPI_ConfigGetFloat(&d, &config, &gpsTime);
 
-                                        if ( AARTSAAPI_ConfigFind( &d, &health, &config, L"gpstimeoffset" ) == AARTSAAPI_OK )
-                                            AARTSAAPI_ConfigGetFloat( &d, &config, &gpsTimeOffset );
+										// Time offset between GPS time and stream time
 
-                                        std::wcout << "GPS " << gpsNumSats << " Sats " << gpsTimeValid << " Valid " << gpsTime << ", " << gpsTimeOffset << std::endl;
-                                    }
+										if (AARTSAAPI_ConfigFind(&d, &health, &config, L"gpstimeoffset") == AARTSAAPI_OK)
+											AARTSAAPI_ConfigGetFloat(&d, &config, &gpsTimeOffset);
 
-                                    std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
-                                }
+										std::wcout << "GPS " << gpsNumSats << " Sats " << gpsTimeValid << " Valid " << gpsTime << ", " << gpsTimeOffset << std::endl;
+									}
 
-                                // Release the hardware
+									std::this_thread::sleep_for( std::chrono::milliseconds(1000));
+								}
 
-                                AARTSAAPI_DisconnectDevice( &d );
-                            }
-                            else
-                                std::wcerr << "AARTSAAPI_ConnectDevice failed : " << std::hex << res << std::endl;
-                        }
+								// Release the hardware
 
-                        // Close the device handle
+								AARTSAAPI_DisconnectDevice(&d);
+							}
+							else
+								std::wcerr << "AARTSAAPI_ConnectDevice failed : " << std::hex << res << std::endl;
+						}
 
-                        AARTSAAPI_CloseDevice( &h, &d );
-                    }
-                    else
-                        std::wcerr << "AARTSAAPI_OpenDevice failed : " << std::hex << res << std::endl;
-                }
-                else
-                    std::wcerr << "AARTSAAPI_EnumDevice failed : " << std::hex << res << std::endl;
-            }
-            else
-                std::wcerr << "AARTSAAPI_RescanDevices failed : " << std::hex << res << std::endl;
+						// Close the device handle
 
-            // Close the library handle
+						AARTSAAPI_CloseDevice(&h, &d);
+					}
+					else
+						std::wcerr << "AARTSAAPI_OpenDevice failed : " << std::hex << res << std::endl;
+				}
+				else
+					std::wcerr << "AARTSAAPI_EnumDevice failed : " << std::hex << res << std::endl;
+			}
+			else
+				std::wcerr << "AARTSAAPI_RescanDevices failed : " << std::hex << res << std::endl;
 
-            AARTSAAPI_Close( &h );
-        }
-        else
-            std::wcerr << "AARTSAAPI_Open failed : " << std::hex << res << std::endl;
+			// Close the library handle
 
-        // Shutdown library, release resources
+			AARTSAAPI_Close(&h);
+		}
+		else
+			std::wcerr << "AARTSAAPI_Open failed : " << std::hex << res << std::endl;
 
-        AARTSAAPI_Shutdown();
-    }
-    else
-        std::wcerr << "AARTSAAPI_Init failed : " << std::hex << res << std::endl;
+		// Shutdown library, release resources
 
-    return 0;
+		AARTSAAPI_Shutdown();
+	}
+	else
+		std::wcerr << "AARTSAAPI_Init failed : " << std::hex << res << std::endl;
+
+	return 0;
 }

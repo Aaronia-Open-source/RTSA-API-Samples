@@ -1,26 +1,64 @@
-#include <AARTSAAPIWrapper.h>
-
-#include <fmt/core.h>
-
-#include <cstdlib>
-#include <iostream>
-#include <memory>
-#include <string>
-
-namespace AAR = AARTSAAPI;
+#include "../helper.h"
 
 int main()
 {
-    auto apiWrapper = AAR::RTSAWrapper::create( AAR::MemoryMode::MEDIUM );
+	if (LoadRTSAAPI_with_searchpath() != 0)
+	{
+		std::wcerr << "Load RTSSAPI failed";
+		return - 1; 
+	}
 
-    std::cout << "Devices:" << std::endl;
-    for ( auto &device : apiWrapper->getAllDevices( AAR::DeviceType::SPECTRANV6 ) )
-        fmt::print( " - Serial Number: {}\n   ready: {}\n   boost: {}\n   superSpeed: {}\n   active: {}\n",
-                    device->getSerialNumber(),
-                    device->isReady(),
-                    device->hasBoost(),
-                    device->isSuperSpeed(),
-                    device->isActive() );
+	AARTSAAPI_Result	res;
 
-    return EXIT_SUCCESS;
+	// Initialize library for medium memory usage
+
+	if ((res = AARTSAAPI_Init_With_Path(AARTSAAPI_MEMORY_MEDIUM, CFG_AARONIA_XML_LOOKUP_DIRECTORY)) == AARTSAAPI_OK)
+	{
+
+		// Open a library handle for use by this application
+
+		AARTSAAPI_Handle	h;
+
+		if ((res = AARTSAAPI_Open(&h)) == AARTSAAPI_OK)
+		{
+			// Rescan all devices controlled by the aaronia library and update
+			// the firmware if required.
+
+			if ((res = AARTSAAPI_RescanDevices(&h, 2000)) == AARTSAAPI_OK)
+			{
+				// Initialize device info structure with the structure size
+
+				AARTSAAPI_DeviceInfo	dinfo = { sizeof(AARTSAAPI_DeviceInfo) };
+
+				// Loop over all devices, starting from zero until an error occurs
+				// or we run out of devices
+
+				int	i = 0;
+				while (AARTSAAPI_EnumDevice(&h, L"spectranv6", i, &dinfo) == AARTSAAPI_OK)
+				{
+					// Print the device serial number
+
+					std::wcout << i << " : " << dinfo.serialNumber << std::endl;
+					i++;
+				}
+			}
+			else
+				std::wcerr << "AARTSAAPI_RescanDevices failed : " << std::hex << res << std::endl;
+
+			// Close the library handle
+
+			AARTSAAPI_Close(&h);
+		}
+		else
+			std::wcerr << "AARTSAAPI_Open failed : " << std::hex << res << std::endl;
+
+		// Shutdown library, release resources
+
+		AARTSAAPI_Shutdown();
+	}
+	else
+		std::wcerr << "AARTSAAPI_Init failed : " << std::hex << res << std::endl;
+
+
+	return 0;
 }
