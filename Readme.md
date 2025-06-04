@@ -196,12 +196,12 @@ if (AARTSAAPI_ConfigFind(&d, &root, &config, L"device/receiverclock") == AARTSAA
 
 | ConfigItem    | ActualRate |
 | -------- | ------- |
-|`46MHz` |46.08 MHz|
-|61MHz|61.44 MHz|
-|76MHz|76.80 MHz|
-|92MHz|92.16 MHz|
-|122MHz|122.88 MHz|
-|245MHz|245.76 MHz|
+|`46MHz` |`46.08 MHz`|
+|`61MHz`|`61.44 MHz`|
+|`76MHz`|`76.80 MHz`|
+|`92MHz`|`92.16 MHz`|
+|`122MHz`|`122.88 MHz`|
+|`245MHz`|`245.76 MHz`|
 
 
 V6 ECO devices have no `device/receiverclock` ConfigItem and have a fixed rate at `61.44 MHz`.
@@ -213,23 +213,23 @@ if (AARTSAAPI_ConfigFind(&d, &root, &config, L"main/decimation") == AARTSAAPI_OK
     AARTSAAPI_ConfigSetString(&d, &config, L"1 / 64");
 ```
 Valid values for decimation are:
-- full
-- 1 / 2
-- 1 / 4
-- 1 / 8
-- 1 / 16
-- 1 / 32
-- 1 / 64
-- 1 / 128
-- 1 / 256
-- 1 / 512
+- `Full`
+- `1 / 2`
+- `1 / 4`
+- `1 / 8`
+- `1 / 16`
+- `1 / 32`
+- `1 / 64`
+- `1 / 128`
+- `1 / 256`
+- `1 / 512`
 
-When using decimation, the resulting sample rate = ActualRate / Decimation, like:
+When using decimation, the `resulting sample rate` **=** `"device/receiverclock"` **/** `"main/decimation"`, like:
 
 ```
-decimation 1/4
-receiverclock 92.16 MHz
-sample rate = 23.04 MHz (92.16 / 4)
+main/decimation:        1/4
+device/receiverclock:   92.16 MHz
+sample rate =           23.04 MHz (92.16 / 4)
 ```
 
 ### IQ modes
