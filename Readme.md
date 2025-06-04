@@ -232,6 +232,36 @@ receiverclock 92.16 MHz
 sample rate = 23.04 MHz (92.16 / 4)
 ```
 
+### IQ modes
+
+Compared to RawMode, the RTSA SDK internally uses modulators/demodulators to make handling the device easier.
+It will especially be easier when using the V6 or V6 ECO as a transmitter or transceiver device in SDR applications.
+
+Coding samples: IQReceiver, IQReceiverEco, IQTransmitter, IQTransmitterEco, IQTranceiver, IQTranceiverEco
+
+This mode offers optimal handling of the V6 / V6 ECO when using arbitrary sample rates.
+
+There is an important concept to understand here:
+
+Instead of setting a decimation, you set the main/spanfreq like:
+
+```
+if (AARTSAAPI_ConfigFind(&d, &root, &config, L"main/spanfreq") == AARTSAAPI_OK)
+AARTSAAPI_ConfigSetFloat(&d, &config, 10.0e6);
+```
+
+This setting comes from the nature of the V6 being a **spectrum analyzer, not an SDR by nature.**
+
+The resulting sample rate of the packet object is `main/spanfreq * 1.5`. This is due to how internal decimation and filters work.
+
+Some examples:
+
+`Desired sample rate = 15 MHz`, you have to set the span to `10 MHz`.
+
+When debugging, `packet.stepFrequency` value tells you the actual sample rate if unsure.
+
+**Keep in mind, that spanfreq can not be higher than receiverclock / 1.5.**
+
 
 ## General hits
 
